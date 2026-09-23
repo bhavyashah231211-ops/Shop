@@ -1,0 +1,2857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CBSystem PRO — Supermarket POS</title>
+<meta name="theme-color" content="#0a0a0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CBSystem PRO">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" defer onerror="this.dataset.failed=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer onerror="this.dataset.failed=1"></script>
+<script>
+// Cloud sync and Excel export are optional — the app must still open and
+// work fully offline/local even if these CDN scripts can't be reached.
+window.addEventListener('load',function(){
+  if(typeof window.supabase==='undefined'){
+    var s=document.createElement('script');
+    s.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';
+    document.head.appendChild(s);
+  }
+  if(typeof window.XLSX==='undefined'){
+    var x=document.createElement('script');
+    x.src='https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+    document.head.appendChild(x);
+  }
+});
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--card:#1e1e2e;--card2:#252538;
+  --border:#2a2a40;--accent:#ff6b35;--accent2:#ffa500;--blue:#4a9eff;
+  --green:#2dd4a0;--red:#ff4560;--purple:#a78bfa;--text:#f0f0f8;
+  --text2:#9090b0;--gold:#ffd700;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);user-select:none;}
+
+/* ── STATION SELECT ── */
+#station-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background-image:radial-gradient(ellipse at 30% 40%,rgba(255,107,53,0.1) 0%,transparent 60%);}
+.ss-logo{font-family:'Bebas Neue';font-size:4rem;color:var(--accent);letter-spacing:6px;line-height:1;}
+.ss-sub{font-size:0.75rem;color:var(--text2);letter-spacing:3px;text-transform:uppercase;margin-top:-6px;}
+.stations-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:800px;width:92%;}
+.st-card{background:var(--card);border:2px solid var(--border);border-radius:20px;padding:26px 16px;cursor:pointer;text-align:center;transition:all 0.22s;}
+.st-card:hover,.st-card:active{transform:translateY(-3px);}
+.st-icon{font-size:2.4rem;margin-bottom:10px;}
+.st-name{font-family:'Bebas Neue';font-size:1.5rem;letter-spacing:2px;margin-bottom:4px;}
+.st-desc{font-size:0.62rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.sc-till{border-color:#ff6b35;} .sc-till:hover{box-shadow:0 0 0 3px rgba(255,107,53,0.2);}
+.sc-stock{border-color:#4a9eff;} .sc-stock:hover{box-shadow:0 0 0 3px rgba(74,158,255,0.2);}
+.sc-manager{border-color:#ffd700;} .sc-manager:hover{box-shadow:0 0 0 3px rgba(255,215,0,0.2);}
+.sc-cust{border-color:#22d3ee;} .sc-cust:hover{box-shadow:0 0 0 3px rgba(34,211,238,0.2);}
+.sc-settings{border-color:#a78bfa;} .sc-settings:hover{box-shadow:0 0 0 3px rgba(167,139,250,0.2);}
+
+/* ── LOGIN ── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background-image:radial-gradient(ellipse at 70% 60%,rgba(255,107,53,0.07) 0%,transparent 60%);}
+.ls-back{position:absolute;top:18px;left:18px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 14px;font-size:0.78rem;cursor:pointer;color:var(--text2);}
+.ls-back:hover{color:var(--text);}
+.ls-venue-name{font-family:'Bebas Neue';font-size:2.8rem;letter-spacing:4px;color:var(--text);margin-bottom:4px;text-align:center;}
+.ls-badge{font-family:'Bebas Neue';font-size:2.4rem;letter-spacing:3px;margin-bottom:2px;}
+.ls-sub{font-size:0.68rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px;}
+.staff-row{display:flex;gap:9px;overflow-x:auto;max-width:580px;width:92%;padding:4px;scrollbar-width:none;}
+.staff-chip{display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;padding:10px 13px;border-radius:13px;border:1px solid var(--border);background:var(--card);transition:all 0.18s;min-width:68px;}
+.staff-chip.sel{border-color:var(--accent);background:rgba(255,107,53,0.1);}
+.s-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;}
+.s-nm{font-size:0.66rem;font-weight:600;white-space:nowrap;text-align:center;}
+.pin-area{display:flex;flex-direction:column;align-items:center;gap:9px;}
+.pin-dots{display:flex;gap:10px;margin-bottom:2px;}
+.pin-dot{width:13px;height:13px;border-radius:50%;border:2px solid var(--border);transition:all 0.18s;}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+.pin-pad{display:grid;grid-template-columns:repeat(3,74px);gap:8px;}
+.pk{width:74px;height:74px;background:var(--card2);border:1px solid var(--border);border-radius:13px;font-size:1.3rem;font-weight:600;cursor:pointer;color:var(--text);transition:all 0.13s;display:flex;align-items:center;justify-content:center;}
+.pk:active{background:var(--accent);transform:scale(0.93);}
+.pin-err{color:var(--red);font-size:0.73rem;min-height:18px;text-align:center;}
+
+/* ── APP SHELL ── */
+#app{display:none;flex-direction:column;height:100vh;}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 13px;height:52px;gap:9px;flex-shrink:0;}
+.t-logo{font-family:'Bebas Neue';font-size:1.5rem;color:var(--accent);letter-spacing:2px;}
+.t-badge{font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:3px 9px;border-radius:9px;}
+.t-tabs{display:flex;gap:3px;flex:1;overflow-x:auto;scrollbar-width:none;}
+.tab{padding:5px 12px;border-radius:8px;font-size:0.74rem;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text2);white-space:nowrap;transition:all 0.18s;}
+.tab.on{background:var(--accent);color:#fff;}
+.tab:hover:not(.on){background:var(--card);color:var(--text);}
+.t-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.t-clock{font-family:'JetBrains Mono';font-size:0.78rem;color:var(--text2);}
+.t-sync{width:7px;height:7px;border-radius:50%;background:var(--green);}
+.t-sync.off{background:var(--red);}
+.t-sync.syncing{background:var(--accent2);animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.usr-btn{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:3px 9px 3px 4px;display:flex;align-items:center;gap:6px;font-size:0.73rem;cursor:pointer;}
+.usr-av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.82rem;}
+.main{display:flex;flex:1;overflow:hidden;}
+.sbar{background:var(--bg2);border-top:1px solid var(--border);padding:3px 13px;display:flex;gap:11px;flex-shrink:0;align-items:center;}
+.sb-it{font-size:0.58rem;color:var(--text2);display:flex;align-items:center;gap:3px;}
+.sb-dot{width:5px;height:5px;border-radius:50%;}
+
+/* ── VIEWS ── */
+.view{display:none;flex:1;overflow:hidden;flex-direction:column;}
+.view.on{display:flex;}
+.vscroll{flex:1;overflow-y:auto;padding:14px;}
+
+/* TILL */
+.pos-wrap{display:flex;flex:1;overflow:hidden;}
+.pos-menu{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.m-sbar{padding:8px 11px;border-bottom:1px solid var(--border);display:flex;gap:6px;}
+.srch{flex:1;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 11px;color:var(--text);font-size:0.82rem;outline:none;font-family:'DM Sans';}
+.srch:focus{border-color:var(--accent);}
+.cat-bar{display:flex;gap:5px;overflow-x:auto;padding:7px 11px;border-bottom:1px solid var(--border);flex-shrink:0;scrollbar-width:none;}
+.cBtn{padding:5px 12px;border-radius:16px;font-size:0.68rem;font-weight:600;cursor:pointer;border:none;background:var(--card);color:var(--text2);white-space:nowrap;transition:0.15s;}
+.cBtn.on{background:var(--accent);color:#fff;}
+.prod-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:7px;padding:10px;overflow-y:auto;flex:1;}
+.pi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 9px;cursor:pointer;transition:0.18s;position:relative;}
+.pi:hover{border-color:var(--accent);transform:translateY(-1px);}
+.pi-name{font-size:0.75rem;font-weight:600;margin-bottom:2px;}
+.pi-price{font-size:0.86rem;font-weight:700;color:var(--accent);}
+.pi-cat{font-size:0.56rem;color:var(--text2);margin-top:2px;}
+.pi-stock{font-size:0.6rem;color:var(--text2);margin-top:3px;}
+.pi.low-s .pi-stock{color:var(--red);}
+.pi-bc{font-size:0.54rem;color:var(--text2);font-family:'JetBrains Mono';}
+.pos-cart{width:290px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;}
+.cart-hdr{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.cart-title{font-family:'Bebas Neue';font-size:1.2rem;}
+.cart-items{flex:1;overflow-y:auto;padding:6px 12px;}
+.ci{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border);}
+.ci-info{flex:1;}
+.ci-nm{font-size:0.73rem;font-weight:600;}
+.ci-pr{font-size:0.79rem;font-weight:700;color:var(--accent);}
+.ci-rm{color:var(--red);cursor:pointer;font-size:0.9rem;padding:2px;}
+.qb{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:0.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.qn{font-family:'JetBrains Mono';font-size:0.78rem;font-weight:600;min-width:16px;text-align:center;}
+.cart-foot{padding:9px 12px;border-top:1px solid var(--border);}
+.tr{display:flex;justify-content:space-between;font-size:0.74rem;color:var(--text2);margin-bottom:2px;}
+.tr.grand{color:var(--text);font-weight:700;font-size:0.9rem;margin-top:5px;padding-top:5px;border-top:1px solid var(--border);}
+.scan-bar{padding:7px 11px;display:flex;gap:7px;border-bottom:1px solid var(--border);}
+
+/* CARDS / TABLES */
+.card{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px;margin-bottom:12px;}
+.card-t{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);margin-bottom:11px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.dash-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:11px;margin-bottom:16px;}
+.dc{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px;}
+.dc-l{font-size:0.63rem;color:var(--text2);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;}
+.dc-v{font-family:'Bebas Neue';font-size:2rem;color:var(--accent);}
+.dc-s{font-size:0.68rem;color:var(--text2);margin-top:2px;}
+
+/* DATA TABLE */
+.data-t{width:100%;border-collapse:collapse;}
+.data-t th{background:var(--bg2);padding:7px 10px;text-align:left;font-size:0.62rem;text-transform:uppercase;letter-spacing:1px;color:var(--text2);}
+.data-t td{padding:7px 10px;font-size:0.77rem;border-top:1px solid var(--border);}
+.data-t tr:hover td{background:rgba(255,255,255,0.02);}
+
+/* FORMS */
+.sf{margin-bottom:9px;}
+.sl{font-size:0.66rem;font-weight:600;color:var(--text2);margin-bottom:4px;display:block;}
+.si,.si-s{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:0.79rem;outline:none;font-family:'DM Sans';}
+.si:focus,.si-s:focus{border-color:var(--accent);}
+.field-row{display:flex;gap:9px;}
+.field-row>div{flex:1;}
+
+/* SETTINGS */
+.set-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.set-card{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px;}
+.set-t{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:11px;}
+.s-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);}
+.s-row:last-child{border-bottom:none;}
+.tog{position:relative;width:40px;height:21px;}
+.tog input{opacity:0;width:0;height:0;}
+.tog-sl{position:absolute;inset:0;background:var(--bg3);border-radius:11px;cursor:pointer;transition:0.28s;}
+.tog-sl:before{content:'';position:absolute;width:15px;height:15px;left:3px;top:3px;background:#fff;border-radius:50%;transition:0.28s;}
+.tog input:checked+.tog-sl{background:var(--accent);}
+.tog input:checked+.tog-sl:before{transform:translateX(19px);}
+
+/* BADGE */
+.badge{display:inline-block;font-size:0.58rem;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:7px;margin-left:5px;}
+.badge-g{background:rgba(45,212,160,0.2);color:var(--green);}
+.badge-r{background:rgba(255,69,96,0.15);color:var(--red);}
+.badge-o{background:rgba(255,107,53,0.15);color:var(--accent);}
+.badge-b{background:rgba(74,158,255,0.15);color:var(--blue);}
+
+/* BTNS */
+.btn{border:none;border-radius:9px;padding:8px 14px;font-size:0.77rem;font-weight:700;cursor:pointer;transition:0.18s;display:inline-flex;align-items:center;justify-content:center;gap:4px;}
+.btn-a{background:var(--accent);color:#fff;}
+.btn-g{background:var(--green);color:#000;}
+.btn-b{background:var(--blue);color:#fff;}
+.btn-r{background:var(--red);color:#fff;}
+.btn-gold{background:var(--gold);color:#000;}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--text2);}
+.btn-o:hover{border-color:var(--text);color:var(--text);}
+.btn-row{display:flex;gap:7px;margin-top:10px;}
+.btn-row .btn{flex:1;}
+.btn-sm{padding:4px 10px;font-size:0.68rem;}
+
+/* MODAL */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(5px);z-index:8000;display:none;align-items:center;justify-content:center;}
+.modal-ov.on{display:flex;}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:17px;padding:20px;max-width:430px;width:92%;max-height:88vh;overflow-y:auto;}
+.modal-t{font-family:'Bebas Neue';font-size:1.45rem;margin-bottom:13px;}
+.pay-ms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px;}
+.pay-opt{background:var(--bg2);border:2px solid var(--border);border-radius:11px;padding:13px;cursor:pointer;text-align:center;transition:0.18s;}
+.pay-opt.on{border-color:var(--accent);background:rgba(255,107,53,0.1);}
+.pay-ic{font-size:1.6rem;margin-bottom:4px;}
+.pay-lb{font-size:0.74rem;font-weight:600;}
+.cash-g{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px;}
+.ck{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:7px;font-size:0.76rem;font-weight:600;cursor:pointer;}
+.ck:active{background:var(--accent);color:#fff;}
+
+/* STOCKTAKE */
+.stk-row{display:grid;grid-template-columns:1fr 90px 90px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);}
+.stk-row:last-child{border-bottom:none;}
+
+/* TOAST */
+#toasts{position:fixed;top:62px;right:13px;display:flex;flex-direction:column;gap:6px;z-index:9999;pointer-events:none;}
+.toast{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:9px 12px;min-width:215px;transform:translateX(270px);transition:transform 0.28s;display:flex;align-items:center;gap:7px;box-shadow:0 6px 18px rgba(0,0,0,0.35);pointer-events:auto;}
+.toast.show{transform:translateX(0);}
+.toast-ic{font-size:1.1rem;}
+.toast-bd{font-weight:700;font-size:0.77rem;}
+.t-g{border-left:3px solid var(--green);}
+.t-o{border-left:3px solid var(--accent);}
+.t-b{border-left:3px solid var(--blue);}
+.t-r{border-left:3px solid var(--red);}
+.t-gd{border-left:3px solid var(--gold);}
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* NOTE: the customer-facing display no longer renders as an in-page
+   overlay — it opens in its own popup window (see openCD() in the
+   CUSTOMER DISPLAY script section) so it can be dragged onto a second
+   monitor facing the customer. Its styles are defined inline there. */
+</style>
+</head>
+<body>
+
+<!-- STATION SELECT -->
+<div id="station-screen">
+  <div class="ss-logo" id="ss-venue">CBSYSTEM PRO</div>
+  <div class="ss-sub">Supermarket POS &amp; Inventory</div>
+  <div class="stations-grid" style="grid-template-columns:repeat(5,1fr);max-width:980px;">
+    <div class="st-card sc-till"     onclick="goLogin('till')">      <div class="st-icon">🖥️</div><div class="st-name">Till</div>      <div class="st-desc">Full · Till &amp; Stock · Till</div></div>
+    <div class="st-card sc-stock"    onclick="goLogin('stock')">     <div class="st-icon">📦</div><div class="st-name">Stock</div>     <div class="st-desc">Full · Till &amp; Stock · Stock</div></div>
+    <div class="st-card sc-manager"  onclick="goLogin('owner')">     <div class="st-icon">👑</div><div class="st-name">Owner</div>     <div class="st-desc">Full Access only</div></div>
+    <div class="st-card sc-cust"     onclick="openCD()">             <div class="st-icon">🪟</div><div class="st-name">Customer</div>  <div class="st-desc">Customer Facing Display</div></div>
+    <div class="st-card sc-settings" onclick="goSettings()">         <div class="st-icon">⚙️</div><div class="st-name">Settings</div>  <div class="st-desc">System Config</div></div>
+  </div>
+  <div style="font-size:0.62rem;color:var(--text2);margin-top:4px" id="ss-mode-lbl">Local Mode · v1.0</div>
+</div>
+
+<!-- SETTINGS PIN -->
+<div id="settings-pin-screen" style="position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background-image:radial-gradient(ellipse at 50% 40%,rgba(167,139,250,0.09) 0%,transparent 60%);">
+  <button class="ls-back" onclick="document.getElementById('settings-pin-screen').style.display='none';document.getElementById('station-screen').style.display='flex'">← Back</button>
+  <div style="font-family:'Bebas Neue';font-size:2.8rem;letter-spacing:4px;color:var(--purple)">⚙️ Settings</div>
+  <div style="font-size:0.68rem;color:var(--text2);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Enter Settings PIN</div>
+  <div style="display:flex;gap:10px;margin-bottom:2px" id="sps-dots">
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <div class="pin-err" id="sps-err"></div>
+  <div class="pin-pad">
+    <button class="pk" onclick="spsPk('1')">1</button><button class="pk" onclick="spsPk('2')">2</button><button class="pk" onclick="spsPk('3')">3</button>
+    <button class="pk" onclick="spsPk('4')">4</button><button class="pk" onclick="spsPk('5')">5</button><button class="pk" onclick="spsPk('6')">6</button>
+    <button class="pk" onclick="spsPk('7')">7</button><button class="pk" onclick="spsPk('8')">8</button><button class="pk" onclick="spsPk('9')">9</button>
+    <button class="pk" onclick="spsPk('del')" style="font-size:1rem">⌫</button><button class="pk" onclick="spsPk('0')">0</button><button class="pk" onclick="spsPk('ok')" style="background:var(--purple);color:#fff">OK</button>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <button class="ls-back" onclick="backToStations()">← Stations</button>
+  <div class="ls-venue-name" id="ls-venue-name">CBSYSTEM</div>
+  <div class="ls-badge" id="ls-badge">Till</div>
+  <div class="ls-sub">Select staff · enter PIN</div>
+  <div class="staff-row" id="staff-row"></div>
+  <div class="pin-area">
+    <div class="pin-dots" id="pin-dots"></div>
+    <div class="pin-err" id="pin-err"></div>
+    <div class="pin-pad">
+      <button class="pk" onclick="pk('1')">1</button><button class="pk" onclick="pk('2')">2</button><button class="pk" onclick="pk('3')">3</button>
+      <button class="pk" onclick="pk('4')">4</button><button class="pk" onclick="pk('5')">5</button><button class="pk" onclick="pk('6')">6</button>
+      <button class="pk" onclick="pk('7')">7</button><button class="pk" onclick="pk('8')">8</button><button class="pk" onclick="pk('9')">9</button>
+      <button class="pk" style="color:var(--red)" onclick="pk('del')">⌫</button>
+      <button class="pk" onclick="pk('0')">0</button>
+      <button class="pk" style="background:var(--accent);color:#fff" onclick="tryLogin()">✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="t-logo">CBS PRO</div>
+    <div class="t-badge" id="t-badge">Till</div>
+    <div class="t-tabs" id="t-tabs"></div>
+    <div class="t-right">
+      <div class="t-clock" id="t-clock">--:--:--</div>
+      <button class="btn btn-o" style="padding:2px 9px;font-size:0.62rem;border-color:#22d3ee;color:#22d3ee" onclick="openCD()" title="Customer Display">🪟</button>
+      <div class="t-sync" id="t-sync" title="Cloud Sync"></div>
+      <div class="usr-btn" onclick="doLogout()">
+        <div class="usr-av" id="t-av">?</div>
+        <span id="t-nm">Staff</span>
+      </div>
+    </div>
+  </div>
+  <div class="main" id="main"></div>
+  <div class="sbar">
+    <div class="sb-it"><div class="sb-dot" style="background:var(--green)"></div>Online</div>
+    <div class="sb-it" id="sb-st"></div>
+    <div class="sb-it" id="sb-md"></div>
+    <div class="sb-it" style="margin-left:auto;color:#2a2a40;font-size:0.56rem" id="sb-venue-name"></div>
+    <div class="sb-it" id="sb-sync"></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-ov"><div class="modal" id="modal-b"></div></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════
+// DEFAULT DATA
+// ═══════════════════════════════════════
+const DSTAFF=[
+  {id:'OWN', name:'Owner',   pin:'0000',role:'manager',   color:'#ffd700',emoji:'👑',active:true},
+  {id:'MGR', name:'Manager', pin:'9999',role:'manager',   color:'#ff6b35',emoji:'👨‍💼',active:true},
+  {id:'ST1', name:'Alex',    pin:'1111',role:'staff',     color:'#4a9eff',emoji:'🛒',active:true},
+  {id:'ST2', name:'Beth',    pin:'2222',role:'till_stock',color:'#2dd4a0',emoji:'💼',active:true},
+  {id:'ST3', name:'Cam',     pin:'3333',role:'stock',     color:'#a78bfa',emoji:'📦',active:true},
+];
+// Role metadata — single source of truth used across UI
+const ROLES={
+  manager:   {label:'Full Access (Owner)',  badge:'👑 Full',   color:'var(--gold)',  stations:['till','stock','owner']},
+  till_stock:{label:'Till & Stock',         badge:'🖥️📦 Till & Stock', color:'var(--green)', stations:['till','stock']},
+  staff:     {label:'Till',                 badge:'🖥️ Till',   color:'var(--blue)',  stations:['till']},
+  stock:     {label:'Stock',                badge:'📦 Stock',  color:'var(--purple)',stations:['stock']},
+};
+function roleLabel(role){return ROLES[role]?.label||role;}
+function roleBadge(role){return ROLES[role]?.badge||role;}
+function roleColor(role){return ROLES[role]?.color||'var(--text2)';}
+const DPRODS=[
+  {id:'p1',name:'Whole Milk 2L',  barcode:'5000169000000',price:1.45,cost:0.72,category:'Dairy',   reorderLevel:10,trackStock:true},
+  {id:'p2',name:'White Bread',    barcode:'5010251000000',price:1.15,cost:0.52,category:'Bakery',   reorderLevel:5, trackStock:true},
+  {id:'p3',name:'Cheddar 400g',   barcode:'5010029000000',price:3.20,cost:1.45,category:'Dairy',   reorderLevel:8, trackStock:true},
+  {id:'p4',name:'Cornflakes 750g',barcode:'5000168000000',price:2.49,cost:0.98,category:'Cereal',  reorderLevel:6, trackStock:true},
+  {id:'p5',name:'Orange Juice 1L',barcode:'5010129000000',price:1.89,cost:0.80,category:'Drinks',  reorderLevel:10,trackStock:true},
+  {id:'p6',name:'Butter 250g',    barcode:'5000119000000',price:1.75,cost:0.70,category:'Dairy',   reorderLevel:8, trackStock:true},
+  {id:'p7',name:'Free Range Eggs 6',barcode:'5051140000000',price:2.10,cost:0.90,category:'Dairy', reorderLevel:12,trackStock:true},
+  {id:'p8',name:'Chicken Breast 1kg',barcode:'5010001000000',price:5.49,cost:2.80,category:'Meat', reorderLevel:5, trackStock:true},
+  {id:'p9',name:'Baked Beans 400g',barcode:'5000140000000',price:0.59,cost:0.22,category:'Canned', reorderLevel:20,trackStock:true},
+  {id:'p10',name:'Pasta 500g',    barcode:'5010329000000',price:0.89,cost:0.30,category:'Dry Goods',reorderLevel:15,trackStock:true},
+];
+const DLOCS=[
+  {id:'loc1',name:'Main Store'},
+  {id:'loc2',name:'Stockroom'},
+  {id:'loc3',name:'Cold Store'},
+];
+// Initial stock: {locId: {prodId: qty}}
+const DSTOCK={
+  loc1:{'p1':24,'p2':18,'p3':14,'p4':20,'p5':30,'p6':12,'p7':16,'p8':8,'p9':40,'p10':35},
+  loc2:{'p1':50,'p2':30,'p3':25,'p4':40,'p5':60,'p6':24,'p7':30,'p8':20,'p9':80,'p10':70},
+  loc3:{'p1':12,'p8':15,'p7':20},
+};
+const DCFG={
+  storeName:'CBSystem Market',storeAddr:'1 High Street',storeTel:'01234 567890',
+  vatRate:20,currency:'£',receiptFooter:'Thank you for shopping with us!',categoryVat:{},
+  cloudMode:false,supabaseUrl:'',supabaseKey:'',venueCode:'',
+  defaultLocation:'loc1',
+  eanLookupEnabled:true,
+  paymentProvider:'manual',
+  printerMode:'browser',drawerKickEnabled:false,drawerKickHex:'1B7000191E',
+  customerMedia:[],customerMediaInterval:8,
+};
+
+// ═══════════════════════════════════════
+// DB  (localStorage + Supabase cloud)
+// ═══════════════════════════════════════
+const DB={
+  d:{},
+  _cbs:[],
+  _sb:null,_sbUrl:null,_sbKey:null,
+  _channel:null,_pollTimer:null,
+  _applyingRemote:false,_pushTimer:null,_lastRemoteTime:0,
+  load(){
+    try{const s=localStorage.getItem('cbspro');if(s)this.d=JSON.parse(s);}catch(e){}
+    if(!this.d.staff)   this.d.staff=JSON.parse(JSON.stringify(DSTAFF));
+    if(!this.d.products)this.d.products=JSON.parse(JSON.stringify(DPRODS));
+    if(!this.d.locations)this.d.locations=JSON.parse(JSON.stringify(DLOCS));
+    if(!this.d.stock)   this.d.stock=JSON.parse(JSON.stringify(DSTOCK));
+    this.d.cfg=Object.assign({},DCFG,this.d.cfg||{});
+    if(!this.d.txns)    this.d.txns=[];
+    if(!this.d.movements)this.d.movements=[];
+    if(!this.d.idc)     this.d.idc=0;
+  },
+  save(){
+    try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
+    this._cbs.forEach(fn=>{try{fn();}catch(e){}});
+    if(!this._applyingRemote&&this.d.cfg?.cloudMode)this._queuePush();
+  },
+  get(k){return this.d[k];},
+  set(k,v){this.d[k]=v;this.save();},
+  nid(){this.d.idc=(this.d.idc||0)+1;this.save();return'P'+String(this.d.idc).padStart(5,'0');},
+  sub(fn){this._cbs.push(fn);},
+  startSync(){
+    if(!this._storageBound){
+      window.addEventListener('storage',e=>{
+        if(e.key==='cbspro'&&e.newValue){try{this.d=JSON.parse(e.newValue);this._cbs.forEach(fn=>{try{fn();}catch(e){}});}catch(r){}}
+      });
+      this._storageBound=true;
+    }
+    this.initCloud();
+  },
+  _client(){
+    const c=this.d.cfg;
+    if(!c.supabaseUrl||!c.supabaseKey||typeof window.supabase==='undefined')return null;
+    if(!this._sb||this._sbUrl!==c.supabaseUrl||this._sbKey!==c.supabaseKey){
+      try{this._sb=window.supabase.createClient(c.supabaseUrl,c.supabaseKey);this._sbUrl=c.supabaseUrl;this._sbKey=c.supabaseKey;}
+      catch(e){this._sb=null;}
+    }
+    return this._sb;
+  },
+  async initCloud(){
+    if(this._channel){try{this._channel.unsubscribe();}catch(e){}this._channel=null;}
+    if(this._pollTimer){clearInterval(this._pollTimer);this._pollTimer=null;}
+    const c=this.d.cfg;
+    if(!c.cloudMode){setSyncDot('off');return;}
+    const sb=this._client();
+    if(!sb){setSyncDot('off');return;}
+    const code=(c.venueCode||'default').trim()||'default';
+    setSyncDot('syncing');
+    try{
+      const{data,error}=await sb.from('cbs_state').select('data,updated_at').eq('id',code).maybeSingle();
+      if(error)throw error;
+      if(data&&data.data){
+        this._applyingRemote=true;
+        const localCfg=this.d.cfg;
+        this.d=data.data;
+        this.d.cfg=Object.assign({},localCfg,data.data.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
+        try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
+        this._cbs.forEach(fn=>{try{fn();}catch(e){}});
+        this._applyingRemote=false;
+      }else{
+        await this._push();
+      }
+      this._pollTimer=setInterval(async()=>{
+        try{
+          const{data,error}=await sb.from('cbs_state').select('data,updated_at').eq('id',code).maybeSingle();
+          if(error||!data||!data.data)return;
+          const rt=new Date(data.updated_at).getTime();
+          if(rt>this._lastRemoteTime){
+            this._lastRemoteTime=rt;
+            this._applyingRemote=true;
+            const localCfg=this.d.cfg;
+            this.d=data.data;
+            this.d.cfg=Object.assign({},localCfg,data.data.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
+            try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
+            this._cbs.forEach(fn=>{try{fn();}catch(e){}});
+            this._applyingRemote=false;
+            setSyncDot('ok');
+            const el=document.getElementById('sb-sync');if(el)el.textContent='Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          }
+        }catch(e){setSyncDot('syncing');}
+      },2000);
+      this._channel=sb.channel('cbspro_'+code)
+        .on('postgres_changes',{event:'*',schema:'public',table:'cbs_state',filter:'id=eq.'+code},payload=>{
+          const remote=payload.new&&payload.new.data;if(!remote)return;
+          this._applyingRemote=true;
+          const localCfg=this.d.cfg;
+          this.d=remote;
+          this.d.cfg=Object.assign({},remote.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
+          try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
+          this._cbs.forEach(fn=>{try{fn();}catch(e){}});
+          this._applyingRemote=false;
+          this._lastRemoteTime=Date.now();
+          setSyncDot('ok');
+        })
+        .subscribe(status=>{setSyncDot(status==='SUBSCRIBED'?'ok':'syncing');});
+      setSyncDot('ok');
+    }catch(e){console.error('Cloud sync failed',e);setSyncDot('off');toast('Cloud sync failed: '+e.message,'❌','t-r');}
+  },
+  _queuePush(){clearTimeout(this._pushTimer);this._pushTimer=setTimeout(()=>this._push(),300);},
+  async _push(){
+    const c=this.d.cfg;if(!c.cloudMode)return;
+    const sb=this._client();if(!sb)return;
+    const code=(c.venueCode||'default').trim()||'default';
+    setSyncDot('syncing');
+    try{
+      const{error}=await sb.from('cbs_state').upsert({id:code,data:this.d,updated_at:new Date().toISOString()});
+      if(error)throw error;
+      setSyncDot('ok');
+      const el=document.getElementById('sb-sync');if(el)el.textContent='Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){console.error('Push failed',e);setSyncDot('off');}
+  }
+};
+
+function setSyncDot(s){document.querySelectorAll('.t-sync').forEach(d=>{d.className='t-sync'+(s==='off'?' off':s==='syncing'?' syncing':'');});}
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const S={station:null,user:null,pin:'',selStaff:null,view:null,
+  cart:[],cartDisc:0,cartPM:'card',
+  prodFilter:'',prodCat:'All',
+  activeLoc: null,
+};
+
+// ═══════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════
+const fmt=n=>(DB.get('cfg').currency||'£')+(parseFloat(n)||0).toFixed(2);
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function nid(){return DB.nid();}
+// ── Sale number — human-readable, sequential, per-day reset
+// Format: SAL-YYYYMMDD-NNNN  e.g. SAL-20240923-0001
+function genSaleNumber(){
+  const today=new Date().toLocaleDateString('en-CA').replace(/-/g,''); // YYYYMMDD
+  const key='cbspro_salenum_'+today;
+  const seq=(parseInt(localStorage.getItem(key)||'0')+1);
+  localStorage.setItem(key,seq);
+  return 'SAL-'+today+'-'+String(seq).padStart(4,'0');
+}
+function showModal(html){document.getElementById('modal-b').innerHTML=html;document.getElementById('modal-ov').classList.add('on');}
+function closeModal(){document.getElementById('modal-ov').classList.remove('on');}
+document.getElementById('modal-ov').addEventListener('click',e=>{if(e.target.id==='modal-ov')closeModal();});
+function toast(msg,icon,cls){
+  const c=document.getElementById('toasts');const t=document.createElement('div');
+  t.className=`toast ${cls||'t-b'}`;t.innerHTML=`<span class="toast-ic">${icon||'ℹ️'}</span><div class="toast-bd">${msg}</div>`;
+  c.appendChild(t);requestAnimationFrame(()=>requestAnimationFrame(()=>t.classList.add('show')));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),320);},3200);
+}
+function dl(content,type,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
+function switchV(id,btn){
+  S.view=id;
+  document.querySelectorAll('#main .view').forEach(v=>{v.classList.remove('on');v.style.display='none';});
+  const el=document.getElementById(id);if(el){el.style.display='flex';el.classList.add('on');}
+  document.querySelectorAll('#t-tabs .tab').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+}
+function getStock(locId,prodId){return(DB.get('stock')[locId]||{})[prodId]||0;}
+function totalStock(prodId){return Object.values(DB.get('stock')).reduce((s,l)=>s+(l[prodId]||0),0);}
+function locName(locId){return DB.get('locations').find(l=>l.id===locId)?.name||locId;}
+function prodByBarcode(bc){return DB.get('products').find(p=>p.barcode===bc.trim());}
+
+// ═══════════════════════════════════════
+// GLOBAL EAN / BARCODE LOOKUP
+// Chains free, keyless barcode databases so a scanned item that isn't
+// in the local catalog yet can still be auto-named. Requires internet.
+// ═══════════════════════════════════════
+async function lookupEAN(barcode){
+  if(!DB.get('cfg').eanLookupEnabled)return null;
+  const bc=(barcode||'').trim();if(!bc)return null;
+  const sources=[
+    {url:`https://world.openfoodfacts.org/api/v2/product/${bc}.json`,parse:j=>j?.product&&j.status===1?{name:j.product.product_name||j.product.generic_name,category:(j.product.categories||'').split(',')[0]?.trim(),brand:j.product.brands,imageUrl:j.product.image_front_small_url}:null},
+    {url:`https://world.openbeautyfacts.org/api/v2/product/${bc}.json`,parse:j=>j?.product&&j.status===1?{name:j.product.product_name||j.product.generic_name,category:(j.product.categories||'').split(',')[0]?.trim(),brand:j.product.brands,imageUrl:j.product.image_front_small_url}:null},
+    {url:`https://world.openproductsfacts.org/api/v2/product/${bc}.json`,parse:j=>j?.product&&j.status===1?{name:j.product.product_name||j.product.generic_name,category:(j.product.categories||'').split(',')[0]?.trim(),brand:j.product.brands,imageUrl:j.product.image_front_small_url}:null},
+  ];
+  for(const src of sources){
+    try{
+      const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),4000);
+      const res=await fetch(src.url,{signal:ctrl.signal});clearTimeout(to);
+      if(!res.ok)continue;
+      const j=await res.json();
+      const hit=src.parse(j);
+      if(hit&&hit.name){hit.name=hit.name.trim();if(hit.brand&&!hit.name.toLowerCase().includes(hit.brand.toLowerCase()))hit.name=`${hit.name} (${hit.brand})`;return hit;}
+    }catch(e){/* try next source */}
+  }
+  return null;
+}
+function prodById(id){return DB.get('products').find(p=>p.id===id);}
+function defaultLoc(){return DB.get('cfg').defaultLocation||DB.get('locations')[0]?.id||'loc1';}
+
+// ═══════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════
+window.addEventListener('load',()=>{
+  DB.load();
+  DB.startSync();
+  initStationScreen();
+  startAutoBackup();
+  setInterval(()=>{const el=document.getElementById('t-clock');if(el)el.textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});},1000);
+});
+
+function initStationScreen(){
+  const cfg=DB.get('cfg');
+  document.getElementById('ss-venue').textContent=cfg.storeName||'CBSystem PRO';
+  document.getElementById('ss-mode-lbl').textContent=(cfg.cloudMode?'☁️ Cloud Mode':'💾 Local Mode')+' · v1.0';
+  document.getElementById('ls-venue-name').textContent=cfg.storeName||'CBSystem PRO';
+  const sb=document.getElementById('sb-venue-name');if(sb)sb.textContent=cfg.storeName||'';
+}
+
+// ═══════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════
+function goLogin(station){
+  S.station=station;S.pin='';S.selStaff=null;
+  document.getElementById('station-screen').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  const labels={till:'🖥️ Till',stock:'📦 Stock',owner:'👑 Owner'};
+  document.getElementById('ls-badge').textContent=labels[station]||station;
+  document.getElementById('pin-err').textContent='';
+  const all=DB.get('staff').filter(s=>s.active!==false);
+  // Show only staff whose role permits this station
+  const show=all.filter(s=>(ROLES[s.role]?.stations||[]).includes(station));
+  document.getElementById('staff-row').innerHTML=show.length?show.map(s=>`
+    <div class="staff-chip" id="sc-${s.id}" onclick="pickStaff('${s.id}')">
+      <div class="s-av" style="background:${s.color}22;color:${s.color}">${s.emoji}</div>
+      <div class="s-nm">${esc(s.name.split(' ')[0])}</div>
+    </div>`).join('')
+    :`<div style="font-size:0.72rem;color:var(--text2);padding:10px">No staff accounts have access to this station.</div>`;
+  renderDots();
+}
+function backToStations(){document.getElementById('login-screen').style.display='none';document.getElementById('station-screen').style.display='flex';S.pin='';S.selStaff=null;}
+function pickStaff(id){S.selStaff=DB.get('staff').find(s=>s.id===id);S.pin='';document.querySelectorAll('.staff-chip').forEach(c=>c.classList.remove('sel'));document.getElementById('sc-'+id)?.classList.add('sel');renderDots();document.getElementById('pin-err').textContent='';}
+function pk(v){if(!S.selStaff){toast('Pick a staff member first','⚠️','t-o');return;}if(v==='del')S.pin=S.pin.slice(0,-1);else if(S.pin.length<6)S.pin+=v;renderDots();if(S.pin.length===S.selStaff.pin.length)setTimeout(tryLogin,140);}
+function renderDots(){const len=S.selStaff?.pin?.length||4;document.getElementById('pin-dots').innerHTML=Array.from({length:len},(_,i)=>`<div class="pin-dot${i<S.pin.length?' filled':''}"></div>`).join('');}
+function tryLogin(){if(!S.selStaff)return;if(S.pin===S.selStaff.pin){S.user=S.selStaff;S.pin='';document.getElementById('login-screen').style.display='none';launchApp();}else{document.getElementById('pin-err').textContent='Wrong PIN — try again';S.pin='';renderDots();setTimeout(()=>{document.getElementById('pin-err').textContent='';},2000);}}
+
+// ═══════════════════════════════════════
+// LAUNCH
+// ═══════════════════════════════════════
+const COLORS={till:'#ff6b35',stock:'#4a9eff',owner:'#ffd700',settings:'#a78bfa'};
+const LABELS={till:'Till',stock:'Stock',owner:'Owner',settings:'Settings'};
+function launchApp(){
+  document.getElementById('app').style.display='flex';
+  const c=COLORS[S.station];const lb=LABELS[S.station];
+  const tb=document.getElementById('t-badge');tb.textContent=lb;tb.style.background=c+'22';tb.style.color=c;
+  const av=document.getElementById('t-av');av.textContent=S.user.emoji;av.style.background=S.user.color+'22';
+  document.getElementById('t-nm').textContent=S.user.name.split(' ')[0];
+  const cfg=DB.get('cfg');
+  document.getElementById('sb-st').innerHTML=`<div class="sb-dot" style="background:${c}"></div>${lb}`;
+  document.getElementById('sb-md').innerHTML=`<div class="sb-dot" style="background:${cfg.cloudMode?'var(--blue)':'var(--green)'}"></div>${cfg.cloudMode?'Cloud':'Local'}`;
+  setSyncDot(cfg.cloudMode?'syncing':'off');
+  S.activeLoc=defaultLoc();
+  if(S.station==='till'){
+    // till_stock users get Stock tab added alongside the Till
+    if(S.user?.role==='till_stock')buildTillAndStock();
+    else buildTill();
+  }
+  else if(S.station==='stock')buildStock();
+  else if(S.station==='owner')buildManager();
+  else if(S.station==='settings')buildSettingsApp();
+  toast('Welcome, '+S.user.name+'!',S.user.emoji,'t-g');
+}
+function doLogout(){if(!confirm('Log out?'))return;document.getElementById('app').style.display='none';S.station=null;S.user=null;S.cart=[];document.getElementById('t-tabs').innerHTML='';document.getElementById('main').innerHTML='';document.getElementById('station-screen').style.display='flex';initStationScreen();}
+
+
+// ═══════════════════════════════════════
+// SETTINGS PIN & STATION
+// ═══════════════════════════════════════
+// Settings PIN is stored in cfg.settingsPin (set by Owner in Users screen).
+// Default on first boot: 1234. Owner should change this immediately.
+function getSettingsPin(){return DB.get('cfg').settingsPin||'1234';}
+let spsPin='';
+function goSettings(){
+  spsPin='';
+  document.getElementById('station-screen').style.display='none';
+  document.getElementById('settings-pin-screen').style.display='flex';
+  renderSpsDots();
+  document.getElementById('sps-err').textContent='';
+}
+function spsPk(v){
+  const maxLen=Math.max(4,getSettingsPin().length);
+  if(v==='del'){spsPin=spsPin.slice(0,-1);}
+  else if(v==='ok'){trySettingsLogin();return;}
+  else if(spsPin.length<maxLen)spsPin+=v;
+  renderSpsDots();
+  if(spsPin.length===getSettingsPin().length)setTimeout(trySettingsLogin,140);
+}
+function renderSpsDots(){
+  const len=Math.max(4,getSettingsPin().length);
+  const dots=document.getElementById('sps-dots');if(!dots)return;
+  dots.innerHTML=Array.from({length:len},(_,i)=>`<div class="pin-dot${i<spsPin.length?' filled':''}"></div>`).join('');
+}
+function trySettingsLogin(){
+  if(spsPin===getSettingsPin()){
+    document.getElementById('settings-pin-screen').style.display='none';
+    S.station='settings';S.user={name:'Settings',emoji:'⚙️',color:'#a78bfa',role:'settings'};
+    launchApp();
+  }else{
+    document.getElementById('sps-err').textContent='Wrong PIN — try again';
+    spsPin='';renderSpsDots();
+    setTimeout(()=>{document.getElementById('sps-err').textContent='';},2000);
+  }
+}
+function buildSettingsApp(){
+  const m=document.getElementById('main');const tb=document.getElementById('t-tabs');
+  const mkTab=(id,label,fn)=>`<button class="tab" onclick="switchV('${id}',this);${fn}()">${label}</button>`;
+  tb.innerHTML=[
+    mkTab('v-settings','⚙️ Settings','renderSettings'),
+    mkTab('v-users','👤 Users','renderUsers'),
+    mkTab('v-locs','📍 Locations','renderLocs'),
+    mkTab('v-backup','💾 Backup','renderBackup'),
+  ].join('');
+  m.innerHTML=`
+    <div class="view" id="v-settings"  style="display:none;flex-direction:column;"><div class="vscroll" id="settings-body"></div></div>
+    <div class="view" id="v-users"     style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>
+    <div class="view" id="v-locs"      style="display:none;flex-direction:column;"><div class="vscroll" id="locs-body"></div></div>
+    <div class="view" id="v-backup"    style="display:none;flex-direction:column;"><div class="vscroll" id="backup-body"></div></div>`;
+  switchV('v-settings',tb.querySelector('.tab'));renderSettings();
+}
+
+// ═══════════════════════════════════════
+// TILL STATION
+// ═══════════════════════════════════════
+function buildTill(){
+  const m=document.getElementById('main');const tb=document.getElementById('t-tabs');
+  m.innerHTML=`<div class="view on" id="v-till" style="display:flex;flex-direction:column;">
+    <div class="pos-wrap">
+      <div class="pos-menu">
+        <div class="scan-bar">
+          <select id="till-loc" class="si-s" style="max-width:160px;" onchange="S.activeLoc=this.value;renderProdGrid()"></select>
+          <input class="srch" id="till-scan" placeholder="📷 Scan barcode or search…" oninput="S.prodFilter=this.value;renderProdGrid()" autocomplete="off">
+          <button class="btn btn-o btn-sm" title="Open Camera Scanner" onclick="openCameraScanner()">📷</button>
+          <button class="btn btn-o btn-sm" onclick="document.getElementById('till-scan').value='';S.prodFilter='';renderProdGrid()">✕</button>
+          <button class="btn btn-o btn-sm" onclick="openReturn()">↩ Return</button>
+          <button class="btn btn-o btn-sm" title="Open Cash Drawer" onclick="openCashDrawer()" style="border-color:var(--green);color:var(--green)">🗂️ Drawer</button>
+        </div>
+        <div id="till-stock-alert" style="display:none;background:rgba(255,69,96,0.12);border-bottom:1px solid rgba(255,69,96,0.3);padding:5px 11px;font-size:0.68rem;color:var(--red);cursor:pointer" onclick="document.getElementById('till-stock-alert-list').style.display=document.getElementById('till-stock-alert-list').style.display==='none'?'block':'none'">
+          ⚠️ <strong id="till-stock-alert-count"></strong> product(s) at or below minimum stock level — tap to view
+          <div id="till-stock-alert-list" style="display:none;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,69,96,0.25)"></div>
+        </div>
+        <div class="cat-bar" id="till-cats"></div>
+        <div class="prod-g" id="till-grid"><div style="padding:24px;color:var(--text2)">Loading…</div></div>
+      </div>
+      <div class="pos-cart">
+        <div class="cart-hdr">
+          <div class="cart-title">🛒 Sale</div>
+          <button class="btn btn-r btn-sm" onclick="voidCart()" title="Void requires Owner approval">🗑️ Void</button>
+        </div>
+        <div class="cart-items" id="cart-items"><div style="text-align:center;color:var(--text2);font-size:0.74rem;padding:28px 12px">Scan or tap a product to begin</div></div>
+        <div class="cart-foot">
+          <div class="tr"><span>Subtotal</span><span id="c-sub">£0.00</span></div>
+          <div class="tr" id="c-disc-row" style="display:none;color:var(--green)"><span>Discount</span><span id="c-disc">-£0.00</span></div>
+          <div class="tr" id="c-vat-row" style="color:var(--text2)"><span id="c-vat-label">Incl. VAT</span><span id="c-vat">£0.00</span></div>
+          <div class="tr grand"><span>TOTAL</span><span id="c-total">£0.00</span></div>
+          <div style="display:flex;gap:5px;margin:8px 0 4px">
+            <div style="flex:1">
+              <label class="sl">Discount (£)</label>
+              <input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" oninput="S.cartDisc=parseFloat(this.value)||0;renderCartTotals()">
+            </div>
+            <div style="flex:1">
+              <label class="sl">Payment</label>
+              <select class="si-s" id="pay-sel" onchange="S.cartPM=this.value">
+                <option value="card">Card</option>
+                <option value="cash">Cash</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-g" style="width:100%;margin-top:6px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  tb.innerHTML='';
+  // Populate location select
+  const ls=document.getElementById('till-loc');
+  DB.get('locations').forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;ls.appendChild(o);});
+  ls.value=S.activeLoc||defaultLoc();
+  // Barcode scan via Enter
+  document.getElementById('till-scan').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){const bc=e.target.value.trim();if(bc){scanBarcode(bc);e.target.value='';S.prodFilter='';renderProdGrid();}}
+  });
+  renderTillCats();renderProdGrid();renderTillStockAlerts();
+  // Camera scanner via BarcodeDetector API
+  S.view='v-till';
+}
+
+// ── Combined Till + Stock for till_stock role ─────────────────
+function buildTillAndStock(){
+  const m=document.getElementById('main');
+  const tb=document.getElementById('t-tabs');
+  // Build the Till view HTML (reuse same markup as buildTill)
+  m.innerHTML=`
+    <div class="view on" id="v-till" style="display:flex;flex-direction:column;">
+      <div class="pos-wrap">
+        <div class="pos-menu">
+          <div class="scan-bar">
+            <select id="till-loc" class="si-s" style="max-width:160px;" onchange="S.activeLoc=this.value;renderProdGrid()"></select>
+            <input class="srch" id="till-scan" placeholder="📷 Scan barcode or search…" oninput="S.prodFilter=this.value;renderProdGrid()" autocomplete="off">
+            <button class="btn btn-o btn-sm" title="Open Camera Scanner" onclick="openCameraScanner()">📷</button>
+            <button class="btn btn-o btn-sm" onclick="document.getElementById('till-scan').value='';S.prodFilter='';renderProdGrid()">✕</button>
+            <button class="btn btn-o btn-sm" onclick="openReturn()">↩ Return</button>
+            <button class="btn btn-o btn-sm" title="Open Cash Drawer" onclick="openCashDrawer()" style="border-color:var(--green);color:var(--green)">🗂️ Drawer</button>
+          </div>
+          <div id="till-stock-alert" style="display:none;background:rgba(255,69,96,0.12);border-bottom:1px solid rgba(255,69,96,0.3);padding:5px 11px;font-size:0.68rem;color:var(--red);cursor:pointer" onclick="document.getElementById('till-stock-alert-list').style.display=document.getElementById('till-stock-alert-list').style.display==='none'?'block':'none'">
+            ⚠️ <strong id="till-stock-alert-count"></strong> product(s) at or below minimum stock level — tap to view
+            <div id="till-stock-alert-list" style="display:none;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,69,96,0.25)"></div>
+          </div>
+          <div class="cat-bar" id="till-cats"></div>
+          <div class="prod-g" id="till-grid"><div style="padding:24px;color:var(--text2)">Loading…</div></div>
+        </div>
+        <div class="pos-cart">
+          <div class="cart-hdr">
+            <div class="cart-title">🛒 Sale</div>
+            <button class="btn btn-r btn-sm" onclick="voidCart()" title="Void requires Owner approval">🗑️ Void</button>
+          </div>
+          <div class="cart-items" id="cart-items"><div style="text-align:center;color:var(--text2);font-size:0.74rem;padding:28px 12px">Scan or tap a product to begin</div></div>
+          <div class="cart-foot">
+            <div class="tr"><span>Subtotal</span><span id="c-sub">£0.00</span></div>
+            <div class="tr" id="c-disc-row" style="display:none;color:var(--green)"><span>Discount</span><span id="c-disc">-£0.00</span></div>
+            <div class="tr" id="c-vat-row" style="color:var(--text2)"><span id="c-vat-label">Incl. VAT</span><span id="c-vat">£0.00</span></div>
+            <div class="tr grand"><span>TOTAL</span><span id="c-total">£0.00</span></div>
+            <div style="display:flex;gap:5px;margin:8px 0 4px">
+              <div style="flex:1"><label class="sl">Discount (£)</label><input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" oninput="S.cartDisc=parseFloat(this.value)||0;renderCartTotals()"></div>
+              <div style="flex:1"><label class="sl">Payment</label><select class="si-s" id="pay-sel" onchange="S.cartPM=this.value"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select></div>
+            </div>
+            <button class="btn btn-g" style="width:100%;margin-top:6px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="view" id="v-intake"    style="display:none;flex-direction:column;"><div class="vscroll" id="intake-body"></div></div>
+    <div class="view" id="v-transfer"  style="display:none;flex-direction:column;"><div class="vscroll" id="transfer-body"></div></div>
+    <div class="view" id="v-stocktake" style="display:none;flex-direction:column;"><div class="vscroll" id="stocktake-body"></div></div>`;
+  // Tabs: Till first, then Stock sub-tabs
+  tb.innerHTML=`
+    <button class="tab on" onclick="switchV('v-till',this);renderProdGrid()">🖥️ Till</button>
+    <button class="tab" onclick="switchV('v-intake',this);renderIntake()">📥 Intake</button>
+    <button class="tab" onclick="switchV('v-transfer',this);renderTransfer()">🔀 Transfer</button>
+    <button class="tab" onclick="switchV('v-stocktake',this);renderStocktake()">📋 Stocktake</button>`;
+  // Populate location select
+  const ls=document.getElementById('till-loc');
+  DB.get('locations').forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;ls.appendChild(o);});
+  ls.value=S.activeLoc||defaultLoc();
+  document.getElementById('till-scan').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){const bc=e.target.value.trim();if(bc){scanBarcode(bc);e.target.value='';S.prodFilter='';renderProdGrid();}}
+  });
+  renderTillCats();renderProdGrid();renderTillStockAlerts();
+  S.view='v-till';
+}
+
+function renderTillCats(){
+  const cats=['All',...new Set(DB.get('products').map(p=>p.category))].filter(Boolean);
+  const b=document.getElementById('till-cats');if(!b)return;
+  b.innerHTML=cats.map(c=>`<button class="cBtn${c===S.prodCat?' on':''}" onclick="S.prodCat='${esc(c)}';renderTillCats();renderProdGrid()">${esc(c)}</button>`).join('');
+}
+
+function renderProdGrid(){
+  const g=document.getElementById('till-grid');if(!g)return;
+  const loc=document.getElementById('till-loc')?.value||S.activeLoc||defaultLoc();
+  let prods=DB.get('products');
+  const f=S.prodFilter.toLowerCase();
+  if(f)prods=prods.filter(p=>p.name.toLowerCase().includes(f)||p.barcode?.includes(f)||p.category?.toLowerCase().includes(f));
+  if(S.prodCat&&S.prodCat!=='All')prods=prods.filter(p=>p.category===S.prodCat);
+  if(!prods.length){g.innerHTML='<div style="padding:24px;color:var(--text2)">No products found.</div>';return;}
+  const stock=DB.get('stock');
+  g.innerHTML=prods.map(p=>{
+    const qty=(stock[loc]||{})[p.id]||0;
+    const low=p.trackStock&&qty<=p.reorderLevel;
+    const imgHtml=p.imageUrl?`<img src="${esc(p.imageUrl)}" style="width:100%;height:64px;object-fit:contain;border-radius:6px;margin-bottom:5px;background:var(--bg2)" onerror="this.style.display='none'">`:'';
+    return`<div class="pi${low?' low-s':''}${p.ageRestricted?' age-r':''}" onclick="addToCart('${p.id}')">
+      ${p.ageRestricted?'<div style="font-size:0.55rem;font-weight:700;color:#fff;background:var(--red);border-radius:4px;padding:1px 5px;margin-bottom:4px;display:inline-block;letter-spacing:0.5px">🔞 18+</div>':''}
+      ${imgHtml}
+      <div class="pi-name">${esc(p.name)}</div>
+      <div class="pi-price">${fmt(p.price)}</div>
+      <div class="pi-cat">${esc(p.category||'')}</div>
+      ${p.trackStock?`<div class="pi-stock">${qty} in stock${low?' ⚠️':''}</div>`:''}
+      ${p.barcode?`<div class="pi-bc">${esc(p.barcode)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function scanBarcode(bc){
+  const p=prodByBarcode(bc);
+  if(!p){toast('Barcode not found: '+bc,'⚠️','t-o');return;}
+  addToCart(p.id,true);
+}
+
+function renderTillStockAlerts(){
+  const prods=DB.get('products');const stock=DB.get('stock');
+  const low=prods.filter(p=>p.trackStock&&totalStock(p.id)<=p.reorderLevel);
+  const alertBar=document.getElementById('till-stock-alert');
+  const alertList=document.getElementById('till-stock-alert-list');
+  const alertCount=document.getElementById('till-stock-alert-count');
+  if(!alertBar)return;
+  if(!low.length){alertBar.style.display='none';return;}
+  alertBar.style.display='block';
+  alertCount.textContent=low.length;
+  if(alertList)alertList.innerHTML=low.map(p=>`<span style="margin-right:10px">${esc(p.name)} (${totalStock(p.id)} left, reorder at ${p.reorderLevel})</span>`).join('');
+}
+
+function openCashDrawer(){
+  const cfg=DB.get('cfg');
+  if(cfg.printerMode==='serial'&&cfg.drawerKickEnabled){
+    // Send ESC/POS kick pulse via serial printer
+    Printer.openDrawer?.().then(ok=>{if(ok)toast('Cash drawer opened','🗂️','t-g');}).catch(()=>{});
+    return;
+  }
+  // Software fallback — WebUSB/BT printers handle this automatically after a receipt.
+  // Show a visual confirmation.
+  showModal(`<div class="modal-t">🗂️ Open Cash Drawer</div>
+    <p style="font-size:0.82rem;color:var(--text2);margin-bottom:14px">To open the cash drawer via a serial receipt printer, enable it in <strong>Settings → Printer & Drawer</strong> and make sure the printer is connected.<br><br>If your drawer is connected directly to a receipt printer, it will open automatically when a receipt is printed.</p>
+    <div class="btn-row"><button class="btn btn-g" style="flex:1" onclick="closeModal()">Got it</button></div>`);
+}
+
+let cameraStream=null;
+function openCameraScanner(){
+  showModal(`<div class="modal-t">📷 Camera Scanner</div>
+    <p style="font-size:0.76rem;color:var(--text2);margin-bottom:10px">Point the camera at a barcode to scan.</p>
+    <video id="scanner-video" style="width:100%;border-radius:10px;background:#000;max-height:260px" autoplay playsinline muted></video>
+    <canvas id="scanner-canvas" style="display:none"></canvas>
+    <div id="scanner-status" style="font-size:0.72rem;color:var(--text2);margin-top:6px;text-align:center">Starting camera…</div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-o" style="flex:1" onclick="stopCameraScanner();closeModal()">Cancel</button></div>`);
+  setTimeout(startCameraScanner,100);
+}
+async function startCameraScanner(){
+  const statusEl=document.getElementById('scanner-status');
+  try{
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const video=document.getElementById('scanner-video');
+    if(!video){stopCameraScanner();return;}
+    video.srcObject=cameraStream;
+    await video.play();
+    if(statusEl)statusEl.textContent='Camera ready — scanning…';
+    // Use BarcodeDetector if available
+    if('BarcodeDetector' in window){
+      const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
+      const scan=async()=>{
+        if(!cameraStream||!document.getElementById('scanner-video'))return;
+        try{
+          const barcodes=await detector.detect(video);
+          if(barcodes.length){
+            const bc=barcodes[0].rawValue;
+            stopCameraScanner();closeModal();
+            scanBarcode(bc);
+            return;
+          }
+        }catch(e){}
+        if(cameraStream)requestAnimationFrame(scan);
+      };
+      requestAnimationFrame(scan);
+    }else{
+      // Fallback: canvas sampling every 500ms using jsQR if available
+      if(typeof jsQR==='undefined'){
+        if(statusEl)statusEl.textContent='Camera active. BarcodeDetector not supported in this browser — use the search bar instead.';
+        return;
+      }
+      const canvas=document.getElementById('scanner-canvas');
+      const ctx=canvas.getContext('2d');
+      const tick=()=>{
+        if(!cameraStream||!document.getElementById('scanner-video'))return;
+        canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+        ctx.drawImage(video,0,0);
+        const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code=jsQR(img.data,img.width,img.height);
+        if(code){stopCameraScanner();closeModal();scanBarcode(code.data);}
+        else setTimeout(tick,500);
+      };
+      setTimeout(tick,500);
+    }
+  }catch(err){
+    if(statusEl)statusEl.textContent='Camera access denied or not available.';
+  }
+}
+function stopCameraScanner(){
+  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;}
+}
+
+function addToCart(prodId,fromScan=false){
+  const p=prodById(prodId);if(!p)return;
+  const loc=document.getElementById('till-loc')?.value||S.activeLoc||defaultLoc();
+  const stock=DB.get('stock');
+  if(p.trackStock){
+    const qty=(stock[loc]||{})[p.id]||0;
+    if(qty<=0){toast('Out of stock: '+p.name,'❌','t-r');return;}
+  }
+  // Age verification — show challenge before adding
+  if(p.ageRestricted){
+    showAgeVerify(p,()=>{
+      const ex=S.cart.find(c=>c.id===prodId);
+      if(ex)ex.qty++;
+      else S.cart.push({id:prodId,name:p.name,price:p.price,qty:1,ageVerified:true});
+      renderCartItems();renderCartTotals();renderCDCart();
+      if(fromScan)toast(p.name+' added ✅','🔞','t-g');
+    });
+    return;
+  }
+  const ex=S.cart.find(c=>c.id===prodId);
+  if(ex)ex.qty++;
+  else S.cart.push({id:prodId,name:p.name,price:p.price,qty:1});
+  renderCartItems();renderCartTotals();renderCDCart();
+  if(fromScan)toast(p.name+' added','✅','t-g');
+}
+
+function showAgeVerify(product,onPass){
+  // Store callback safely — avoids unreliable toString() serialisation
+  window._ageVerifyPass=onPass;
+  showModal(`
+    <div style="text-align:center;padding:10px 0 6px">
+      <div style="font-size:3.2rem;margin-bottom:8px">🔞</div>
+      <div class="modal-t" style="margin-bottom:4px">Age Verification Required</div>
+      <div style="font-size:0.78rem;color:var(--text2);margin-bottom:18px"><strong>${esc(product.name)}</strong> is restricted to customers aged 18 and over.</div>
+      <div style="background:rgba(255,215,0,0.08);border:2px solid var(--gold);border-radius:12px;padding:14px 18px;margin-bottom:18px">
+        <div style="font-size:0.7rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Challenge 25 — Ask for ID if the customer appears under 25</div>
+        <div style="font-size:0.8rem;font-weight:600">Does the customer appear to be <strong>18 or over</strong>?</div>
+        <div style="font-size:0.7rem;color:var(--text2);margin-top:4px">Acceptable ID: Passport · Driving Licence · PASS card</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-r" style="flex:1;padding:12px" onclick="closeModal();window._ageVerifyPass=null;toast('Sale of restricted item refused','🔞','t-r')">✕ Refuse Sale</button>
+        <button class="btn btn-g" style="flex:1;padding:12px" onclick="ageVerifyApprove()">✅ Age Verified — Add Item</button>
+      </div>
+    </div>`);
+}
+function ageVerifyApprove(){
+  closeModal();
+  const fn=window._ageVerifyPass;
+  window._ageVerifyPass=null;
+  if(typeof fn==='function')fn();
+}
+
+function renderCartItems(){
+  const el=document.getElementById('cart-items');if(!el)return;
+  if(!S.cart.length){el.innerHTML='<div style="text-align:center;color:var(--text2);font-size:0.74rem;padding:28px 12px">Cart is empty</div>';return;}
+  el.innerHTML=S.cart.map((c,i)=>`
+    <div class="ci">
+      <button class="qb" onclick="cartQty(${i},-1)">−</button>
+      <span class="qn">${c.qty}</span>
+      <button class="qb" onclick="cartQty(${i},1)">+</button>
+      <div class="ci-info">
+        <div class="ci-nm">${esc(c.name)}</div>
+        <div class="ci-pr">${fmt(c.price*c.qty)}</div>
+      </div>
+      <span class="ci-rm" onclick="removeCartItem(${i})">✕</span>
+    </div>`).join('');
+}
+
+function cartQty(i,d){S.cart[i].qty+=d;if(S.cart[i].qty<=0)S.cart.splice(i,1);renderCartItems();renderCartTotals();renderCDCart();}
+function removeCartItem(i){S.cart.splice(i,1);renderCartItems();renderCartTotals();renderCDCart();}
+function clearCart(){S.cart=[];S.cartDisc=0;document.getElementById('disc-input').value='0';renderCartItems();renderCartTotals();renderCDCart();}
+
+function voidCart(){
+  if(!S.cart.length){toast('Cart is already empty','⚠️','t-o');return;}
+  // Owners can void freely; staff need manager approval
+  const doVoid=(approver)=>{
+    const voidRef='VOID-'+Date.now();
+    // Log void as a voided transaction for audit trail
+    const txns=DB.get('txns');
+    txns.push({id:voidRef,time:Date.now(),staff:S.user?.name,approvedBy:approver,items:[...S.cart],total:0,method:'void',voided:true,voidedBy:approver||S.user?.name});
+    DB.set('txns',txns);
+    clearCart();
+    toast('Transaction voided — approved by '+(approver||S.user?.name),'🗑️','t-o');
+  };
+  if(S.user?.role==='manager'){
+    if(!confirm('Void this transaction? This will clear the cart and log a void record.'))return;
+    doVoid(S.user.name);
+  }else{
+    requireManagerApproval('Voiding a transaction requires Owner approval.',approverName=>{
+      doVoid(approverName);
+    });
+  }
+}
+
+// ═══════════════════════════════════════
+// VAT
+// Shelf/menu prices are treated as VAT-inclusive (standard UK retail
+// practice). VAT is only extracted from lines whose product (or, failing
+// that, category) is flagged vatable. The auto-calculated figure is
+// always shown live on the till and customer display; it can additionally
+// be manually overridden per-sale at the payment step (see openCharge()).
+// ═══════════════════════════════════════
+function catVatable(cat){
+  const cv=DB.get('cfg').categoryVat||{};
+  return cv.hasOwnProperty(cat)?!!cv[cat]:true; // vatable by default unless a category says otherwise
+}
+function prodVatable(p){
+  if(!p)return true;
+  return p.vatable!==undefined&&p.vatable!==null?!!p.vatable:catVatable(p.category);
+}
+function cartTotals(){
+  const sub=S.cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const disc=Math.min(S.cartDisc,sub);
+  const after=sub-disc;
+  const rate=DB.get('cfg').vatRate||0;
+  const vatableSub=S.cart.reduce((s,c)=>s+(prodVatable(prodById(c.id))?c.price*c.qty:0),0);
+  const vatShare=sub>0?disc*(vatableSub/sub):0;
+  const vatableAfterDisc=Math.max(0,vatableSub-vatShare);
+  const vat=rate>0?vatableAfterDisc-(vatableAfterDisc/(1+rate/100)):0;
+  return{sub,disc,total:after,vat,vatRate:rate};
+}
+
+function renderCartTotals(){
+  const t=cartTotals();
+  const e=id=>document.getElementById(id);
+  if(e('c-sub'))e('c-sub').textContent=fmt(t.sub);
+  if(e('c-disc'))e('c-disc').textContent='-'+fmt(t.disc);
+  if(e('c-disc-row'))e('c-disc-row').style.display=t.disc>0?'flex':'none';
+  if(e('c-vat-label'))e('c-vat-label').textContent=`Incl. VAT (${t.vatRate}%)`;
+  if(e('c-vat'))e('c-vat').textContent=fmt(t.vat);
+  if(e('c-total'))e('c-total').textContent=fmt(t.total);
+}
+
+function openCharge(){
+  if(!S.cart.length){toast('Cart is empty','⚠️','t-o');return;}
+  const t=cartTotals();
+  let pm=S.cartPM||'card';
+  showModal(`<div class="modal-t">💳 Payment</div>
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:0.72rem;color:var(--text2)">${S.cart.length} item(s)</div>
+      <div style="font-family:'Bebas Neue';font-size:3rem;color:var(--accent)">${fmt(t.total)}</div>
+    </div>
+    <div class="sf" style="margin-bottom:10px">
+      <label class="sl">VAT included in total (${t.vatRate}%) — auto-calculated, editable</label>
+      <input type="number" class="si" id="chg-vat" min="0" step="0.01" value="${t.vat.toFixed(2)}">
+    </div>
+    <div class="pay-ms">
+      <div class="pay-opt${pm==='card'?' on':''}" id="pm-card" onclick="selPM('card')"><div class="pay-ic">💳</div><div class="pay-lb">Card</div></div>
+      <div class="pay-opt${pm==='cash'?' on':''}" id="pm-cash" onclick="selPM('cash')"><div class="pay-ic">💵</div><div class="pay-lb">Cash</div></div>
+    </div>
+    <div id="pm-detail">${pm==='cash'?cashHTML(t.total):cardHTML(t.total)}</div>
+    <div style="display:flex;gap:7px;margin-top:10px">
+      <button class="btn btn-o" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-g" style="flex:2" onclick="completeCharge()">✅ Confirm Payment</button>
+    </div>`);
+  window._chargeTotal=t.total;
+  window.selPM=m=>{pm=m;S.cartPM=m;document.querySelectorAll('.pay-opt').forEach(e=>e.classList.remove('on'));document.getElementById('pm-'+m)?.classList.add('on');document.getElementById('pm-detail').innerHTML=m==='cash'?cashHTML(t.total):cardHTML(t.total);};
+  window.csh=v=>{const td=t.total;const ch=v-td;document.getElementById('ctnd').textContent=fmt(v);document.getElementById('cchng').textContent=fmt(Math.max(0,ch));};
+}
+function cardHTML(tot){return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center"><div style="font-size:1.3rem;margin-bottom:6px">💳</div><div style="font-family:'Bebas Neue';font-size:2rem">${fmt(tot)}</div><div style="font-size:0.72rem;color:var(--text2)">Tap, insert or swipe card</div></div>`;}
+function cashHTML(tot){return`<div style="display:flex;flex-direction:column;gap:7px">
+  <div style="display:flex;justify-content:space-between;font-size:0.79rem"><span style="color:var(--text2)">Total</span><strong>${fmt(tot)}</strong></div>
+  <div style="display:flex;justify-content:space-between;font-size:0.79rem"><span style="color:var(--text2)">Tendered</span><strong id="ctnd">${fmt(0)}</strong></div>
+  <div style="display:flex;justify-content:space-between;font-size:0.79rem"><span style="color:var(--text2)">Change</span><strong id="cchng" style="color:var(--green)">${fmt(0)}</strong></div>
+  <div class="cash-g">${[5,10,20,50].map(v=>`<button class="ck" onclick="csh(${v})">${fmt(v)}</button>`).join('')}<button class="ck" style="grid-column:span 4;color:var(--accent)" onclick="csh(${tot.toFixed(2)})">Exact ${fmt(tot)}</button></div>
+</div>`;}
+
+function completeCharge(){
+  const t=cartTotals();
+  const loc=document.getElementById('till-loc')?.value||S.activeLoc||defaultLoc();
+  const stock=DB.get('stock');
+  // Deduct stock
+  S.cart.forEach(c=>{
+    const p=prodById(c.id);if(!p||!p.trackStock)return;
+    if(!stock[loc])stock[loc]={};
+    stock[loc][c.id]=(stock[loc][c.id]||0)-c.qty;
+    if(stock[loc][c.id]<0)stock[loc][c.id]=0;
+  });
+  // Record transaction — VAT defaults to the auto-calculated figure but
+  // reflects whatever the cashier left in the editable field at payment.
+  const vatInput=parseFloat(document.getElementById('chg-vat')?.value);
+  const vat=isNaN(vatInput)?t.vat:Math.max(0,vatInput);
+  const txns=DB.get('txns');
+  const tx={id:'TX'+Date.now(),saleNo:genSaleNumber(),items:S.cart.map(c=>({...c})),sub:t.sub,disc:t.disc,total:t.total,vat,vatRate:t.vatRate,net:t.total-vat,method:S.cartPM,staff:S.user?.name,location:loc,time:Date.now()};
+  txns.push(tx);
+  // Record stock movements
+  const mvs=DB.get('movements');
+  S.cart.forEach(c=>{mvs.push({type:'sale',prodId:c.id,prodName:c.name,qty:-c.qty,locId:loc,locName:locName(loc),staff:S.user?.name,txnId:tx.id,time:Date.now()});});
+  DB.d.stock=stock;DB.d.txns=txns;DB.d.movements=mvs;DB.save();
+  closeModal();
+  toast(`Sale £${t.total.toFixed(2)} — ${S.cartPM}`,'✅','t-g');
+  clearCart();renderProdGrid();renderCDCart();
+  if(S.cartPM==='cash'&&DB.get('cfg').drawerKickEnabled)Printer.kickDrawer();
+  openReceiptPrompt(tx);
+}
+
+function openReceiptPrompt(tx){
+  showModal(`<div class="modal-t">✅ Sale Complete</div>
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-family:'Bebas Neue';font-size:2.4rem;color:var(--green)">${fmt(tx.total)}</div>
+      <div style="font-size:0.72rem;color:var(--text2)">${tx.items.length} item(s) · ${tx.method}</div>
+      <div style="font-family:'JetBrains Mono';font-size:0.78rem;color:var(--blue);margin-top:4px;letter-spacing:1px">${tx.saleNo||tx.id}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <button class="btn btn-b" onclick="Printer.printReceipt('${tx.id}')">🖨️ Print Receipt</button>
+      <button class="btn btn-o" onclick="Printer.kickDrawer()">💰 Open Cash Drawer</button>
+      <button class="btn btn-g" onclick="closeModal()">Done — No Receipt</button>
+    </div>`);
+}
+
+// ── Manager Approval Gate ──────────────────────────────────────
+// Shows a PIN pad requiring any Owner/Manager-role staff to approve.
+// onApproved(approverName) is called only when a valid manager PIN is entered.
+function requireManagerApproval(reason, onApproved){
+  const managers=DB.get('staff').filter(s=>s.role==='manager'&&s.active!==false);
+  if(!managers.length){toast('No Owner accounts exist — cannot approve','⚠️','t-o');return;}
+  let approvalPin='';
+  const renderApprDots=()=>{
+    const d=document.getElementById('appr-dots');if(!d)return;
+    d.innerHTML=Array.from({length:4},(_,i)=>`<div class="pin-dot${i<approvalPin.length?' filled':''}"></div>`).join('');
+  };
+  const tryApprove=()=>{
+    const mgr=managers.find(m=>m.pin===approvalPin);
+    if(mgr){
+      closeModal();
+      toast('Approved by '+mgr.name,'✅','t-g');
+      onApproved(mgr.name);
+    }else{
+      document.getElementById('appr-err').textContent='Wrong PIN — try again';
+      approvalPin='';renderApprDots();
+      setTimeout(()=>{const e=document.getElementById('appr-err');if(e)e.textContent='';},2000);
+    }
+  };
+  const apprPk=(v)=>{
+    if(v==='del'){approvalPin=approvalPin.slice(0,-1);}
+    else if(v==='ok'){tryApprove();return;}
+    else if(approvalPin.length<6)approvalPin+=v;
+    renderApprDots();
+    if(approvalPin.length===4)setTimeout(tryApprove,140);
+  };
+  window._apprPk=apprPk;
+  showModal(`
+    <div style="text-align:center;padding:6px 0">
+      <div style="font-size:2.2rem;margin-bottom:6px">🔑</div>
+      <div class="modal-t" style="margin-bottom:4px">Owner Approval Required</div>
+      <div style="font-size:0.76rem;color:var(--text2);margin-bottom:16px">${esc(reason)}</div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:6px" id="appr-dots">
+        <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+      </div>
+      <div class="pin-err" id="appr-err" style="margin-bottom:10px"></div>
+      <div class="pin-pad" style="margin:0 auto;max-width:240px">
+        <button class="pk" onclick="_apprPk('1')">1</button><button class="pk" onclick="_apprPk('2')">2</button><button class="pk" onclick="_apprPk('3')">3</button>
+        <button class="pk" onclick="_apprPk('4')">4</button><button class="pk" onclick="_apprPk('5')">5</button><button class="pk" onclick="_apprPk('6')">6</button>
+        <button class="pk" onclick="_apprPk('7')">7</button><button class="pk" onclick="_apprPk('8')">8</button><button class="pk" onclick="_apprPk('9')">9</button>
+        <button class="pk" onclick="_apprPk('del')" style="font-size:1rem">⌫</button><button class="pk" onclick="_apprPk('0')">0</button><button class="pk" onclick="_apprPk('ok')" style="background:var(--green);color:#fff">OK</button>
+      </div>
+      <button class="btn btn-o" style="width:100%;margin-top:14px" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+
+function openReturn(){
+  // Staff must get manager approval before seeing refund list
+  if(S.user?.role!=='manager'){
+    requireManagerApproval('A refund requires Owner approval. Please enter an Owner PIN.',approverName=>{
+      openReturnList(approverName);
+    });
+  }else{
+    openReturnList(S.user.name);
+  }
+}
+
+function openReturnList(approverName){
+  const allTxns=DB.get('txns').filter(t=>!t.refunded&&!t.voided);
+  const txns=allTxns.slice(-50).reverse();
+  const txRowHTML=list=>list.map(tx=>`
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer" onclick="doReturn('${tx.id}','${esc(approverName)}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${fmt(tx.total)}</span>
+        <span style="font-family:'JetBrains Mono';font-size:0.62rem;color:var(--blue)">${esc(tx.saleNo||tx.id)}</span>
+        <span style="font-size:0.62rem;color:var(--text2)">${new Date(tx.time).toLocaleString('en-GB')}</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--text2)">${tx.items?.map(i=>i.qty+'× '+i.name).join(', ')}</div>
+    </div>`).join('');
+  showModal(`<div class="modal-t">↩ Process Return</div>
+    <div style="font-size:0.72rem;color:var(--green);margin-bottom:10px">✅ Approved by ${esc(approverName)}</div>
+    <div class="sf" style="margin-bottom:10px">
+      <label class="sl">Scan receipt barcode or enter Sale Ref</label>
+      <input class="si" id="return-scan" placeholder="SAL-20240923-0001 or scan…" autocomplete="off" oninput="filterReturnList(this.value,'${esc(approverName)}')">
+    </div>
+    <div style="font-size:0.73rem;color:var(--text2);margin-bottom:6px">Or select from recent transactions:</div>
+    <div id="return-list" style="max-height:260px;overflow-y:auto">${txRowHTML(txns)||'<div style="color:var(--text2);padding:16px;text-align:center">No transactions to refund</div>'}
+    </div>
+    <button class="btn btn-o" style="width:100%;margin-top:10px" onclick="closeModal()">Cancel</button>`);
+  // Wire up Enter key on scan field
+  setTimeout(()=>{
+    const el=document.getElementById('return-scan');
+    if(el){el.focus();el.addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(!v)return;const tx=DB.get('txns').find(t=>t.saleNo===v||t.id===v);if(tx&&!tx.refunded&&!tx.voided)doReturn(tx.id,approverName);else toast('Receipt ref not found: '+v,'⚠️','t-o');}});}
+  },100);
+  window._returnApprover=approverName;
+  window._allReturnTxns=txns;
+}
+function filterReturnList(val,approverName){
+  const list=document.getElementById('return-list');if(!list)return;
+  const q=val.trim().toLowerCase();
+  const txns=window._allReturnTxns||[];
+  const filtered=q?txns.filter(t=>(t.saleNo||'').toLowerCase().includes(q)||(t.id||'').toLowerCase().includes(q)):txns;
+  const txRowHTML=filtered.map(tx=>`
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer" onclick="doReturn('${tx.id}','${esc(approverName)}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${fmt(tx.total)}</span>
+        <span style="font-family:'JetBrains Mono';font-size:0.62rem;color:var(--blue)">${esc(tx.saleNo||tx.id)}</span>
+        <span style="font-size:0.62rem;color:var(--text2)">${new Date(tx.time).toLocaleString('en-GB')}</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--text2)">${tx.items?.map(i=>i.qty+'× '+i.name).join(', ')}</div>
+    </div>`).join('');
+  list.innerHTML=txRowHTML||'<div style="color:var(--text2);padding:16px;text-align:center">No matching transactions</div>';
+}
+
+function doReturn(txId, approverName){
+  const tx=DB.get('txns').find(t=>t.id===txId);if(!tx)return;
+  if(!confirm(`Refund ${fmt(tx.total)} for ${tx.items?.length} item(s)?`))return;
+  const stock=DB.get('stock');const loc=tx.location||defaultLoc();
+  tx.items?.forEach(c=>{
+    const p=prodById(c.id);if(!p||!p.trackStock)return;
+    if(!stock[loc])stock[loc]={};
+    stock[loc][c.id]=(stock[loc][c.id]||0)+c.qty;
+  });
+  tx.refunded=true;tx.refundTime=Date.now();tx.refundBy=S.user?.name;tx.refundApprovedBy=approverName||S.user?.name;
+  const mvs=DB.get('movements');
+  tx.items?.forEach(c=>{mvs.push({type:'return',prodId:c.id,prodName:c.name,qty:c.qty,locId:loc,locName:locName(loc),staff:S.user?.name,approvedBy:approverName,time:Date.now()});});
+  DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+  closeModal();
+  toast('Refund processed — '+fmt(tx.total),'↩','t-b');renderProdGrid();
+}
+
+// ═══════════════════════════════════════
+// PRINTER & CASH DRAWER
+// Two real modes:
+//  - "browser": formats a receipt and uses window.print() — works with any
+//    printer installed as a normal system/USB printer, on any browser.
+//  - "serial": talks directly to a USB thermal printer over WebSerial (raw
+//    ESC/POS bytes) — real device I/O, Chrome/Edge desktop only, and the
+//    printer must be plugged in via USB (it shows up as a serial port).
+// A drawer wired into the printer is kicked with the same ESC/POS pulse
+// command sent over that same serial connection.
+// NOTE: browsers cannot open raw network/TCP sockets, so a printer that
+// only has an Ethernet/WiFi (no USB) connection can't be driven directly
+// from this page — it needs a tiny local bridge program, or use it as a
+// normal shared Windows/network printer via "browser" mode instead.
+// ═══════════════════════════════════════
+const Printer={
+  port:null,writer:null,
+  async connect(){
+    if(!('serial' in navigator)){toast('USB Serial printing needs Chrome or Edge on desktop','⚠️','t-o');return false;}
+    try{
+      this.port=await navigator.serial.requestPort();
+      await this.port.open({baudRate:9600});
+      this.writer=this.port.writable.getWriter();
+      toast('Printer connected','🖨️','t-g');
+      return true;
+    }catch(e){toast('Printer connection cancelled/failed: '+e.message,'⚠️','t-o');return false;}
+  },
+  async disconnect(){
+    try{this.writer?.releaseLock();await this.port?.close();}catch(e){}
+    this.port=null;this.writer=null;
+  },
+  hexToBytes(hex){const clean=(hex||'').replace(/\s+/g,'');const out=[];for(let i=0;i<clean.length;i+=2)out.push(parseInt(clean.substr(i,2),16));return new Uint8Array(out.filter(n=>!isNaN(n)));},
+  async writeText(str){
+    if(!this.writer){const ok=await this.connect();if(!ok)return false;}
+    const enc=new TextEncoder();
+    await this.writer.write(enc.encode(str));
+    return true;
+  },
+  async kickDrawer(){
+    const cfg=DB.get('cfg');
+    if(cfg.printerMode!=='serial'){toast('Opening the drawer needs a USB (Serial) printer connection — set it in Settings → Printer & Cash Drawer.','⚠️','t-o');return;}
+    if(!this.writer){const ok=await this.connect();if(!ok)return;}
+    try{await this.writer.write(this.hexToBytes(cfg.drawerKickHex||'1B7000191E'));toast('Cash drawer opened','💰','t-g');}
+    catch(e){toast('Drawer kick failed: '+e.message,'❌','t-r');}
+  },
+  receiptText(tx){
+    const cfg=DB.get('cfg');const W=32;
+    const line=ch=>ch.repeat(W)+'\n';
+    const center=s=>{const pad=Math.max(0,Math.floor((W-s.length)/2));return ' '.repeat(pad)+s+'\n';};
+    const row=(l,r)=>{const gap=Math.max(1,W-l.length-r.length);return l+' '.repeat(gap)+r+'\n';};
+    let out='';
+    out+=center(cfg.storeName||'CBSystem');
+    if(cfg.storeAddr)out+=center(cfg.storeAddr);
+    if(cfg.storeTel)out+=center(cfg.storeTel);
+    out+=line('-');
+    tx.items.forEach(c=>{out+=row(c.name.slice(0,W-8),fmt(c.price*c.qty));if(c.qty>1)out+=`  ${c.qty} x ${fmt(c.price)}\n`;});
+    out+=line('-');
+    out+=row('Subtotal',fmt(tx.sub));
+    if(tx.disc)out+=row('Discount',fmt(-tx.disc));
+    out+=row('TOTAL',fmt(tx.total));
+    if(tx.vat!=null)out+=row(`  incl. VAT (${tx.vatRate!=null?tx.vatRate:cfg.vatRate}%)`,fmt(tx.vat));
+    out+=row('Paid via',tx.method);
+    out+=line('-');
+    out+=center(new Date(tx.time).toLocaleString('en-GB'));
+    out+=center('Ref: '+(tx.saleNo||tx.id));
+    if(cfg.receiptFooter)out+=center(cfg.receiptFooter);
+    out+='\n\n\n';
+    return out;
+  },
+  // ── Code 128B barcode SVG (no external lib) ──────────────────
+  barcodeSVG(text){
+    // Code 128B encoding table (value → 5+3 bar pattern as 11-bit binary string)
+    const C128B_START=104,C128_STOP=106,C128_STOP_BARS='1100011101011';
+    const C128={};
+    // Patterns for values 0–106 (subset B, characters 32–127 map to values 0–95)
+    const PATTERNS=['11011001100','11001101100','11001100110','10010011000','10010001100','10001001100','10011001000','10011000100','10001100100','11001001000','11001000100','11000100100','10110011100','10011011100','10011001110','10111001100','10011101100','10011100110','11001110010','11001011100','11001001110','11011100100','11001110100','11101101110','11101001100','11100101100','11100100110','11101100100','11100110100','11100110010','11011011000','11011000110','11000110110','10100011000','10001011000','10001000110','10110001000','10110000100','10011000010','11110111010','11000010100','10001111010','10100111100','10010111100','10010011110','10111100100','10011110100','10011110010','11110100100','11110010100','11110010010','11011110100','11011110010','11110110010','10100011110','10001011110','10111011110','10111101100','10011101110','10111011100','11110011010','11100011010','11011010000','11011001010','10111001010','10110101110','10110100100','10110010010','11011000010','11000101100','11001010110','10100001100','10001001010','10001010110','10001101010','10001100010','10100011010','11010011010','11001010110','11100101010','10110001100','10001011010','11010001010','11000101010','10100010110','10101011110','10100101110','10111000110','10000100010','11000010010','10001000010','10100100000','10000100100','10001000100','10000010100','11011111010','11011110110','11110110110','10100001010'];
+    // guard against character outside printable ASCII
+    const safe=text.replace(/[^\x20-\x7E]/g,'?');
+    let checksum=C128B_START;
+    const vals=[C128B_START];
+    for(let i=0;i<safe.length;i++){const v=safe.charCodeAt(i)-32;vals.push(v);checksum=(checksum+v*(i+1))%103;}
+    vals.push(checksum%103);
+    let bits=PATTERNS[C128B_START];
+    for(let i=1;i<vals.length;i++)bits+=PATTERNS[vals[i]];
+    bits+=C128_STOP_BARS;
+    const W=bits.length*2,H=50;
+    let bars='';let x=0;
+    for(const b of bits){if(b==='1')bars+=`<rect x="${x*2}" y="0" width="2" height="${H}" fill="#000"/>`;x++;}
+    return`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H+14}" viewBox="0 0 ${W} ${H+14}">
+      <rect width="${W}" height="${H+14}" fill="#fff"/>
+      ${bars}
+      <text x="${W/2}" y="${H+12}" text-anchor="middle" font-family="monospace" font-size="9" fill="#000">${esc(text)}</text>
+    </svg>`;
+  },
+  receiptHTML(tx){
+    const cfg=DB.get('cfg');
+    const saleRef=tx.saleNo||tx.id;
+    const barSvg=this.barcodeSVG(saleRef);
+    return `<div style="font-family:'JetBrains Mono',monospace;width:280px;font-size:12px;color:#000">
+      ${cfg.storeLogo?`<div style="text-align:center;margin-bottom:6px"><img src="${cfg.storeLogo}" style="max-height:60px;max-width:200px;object-fit:contain"></div>`:''}
+      <div style="text-align:center;font-weight:700;font-size:14px">${esc(cfg.storeName||'CBSystem')}</div>
+      ${cfg.storeAddr?`<div style="text-align:center">${esc(cfg.storeAddr)}</div>`:''}
+      ${cfg.storeTel?`<div style="text-align:center">${esc(cfg.storeTel)}</div>`:''}
+      <hr>
+      ${tx.items.map(c=>`<div style="display:flex;justify-content:space-between"><span>${esc(c.name)}${c.qty>1?` x${c.qty}`:''}</span><span>${fmt(c.price*c.qty)}</span></div>`).join('')}
+      <hr>
+      <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(tx.sub)}</span></div>
+      ${tx.disc?`<div style="display:flex;justify-content:space-between"><span>Discount</span><span>-${fmt(tx.disc)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span>${fmt(tx.total)}</span></div>
+      ${tx.vat!=null?`<div style="display:flex;justify-content:space-between;font-size:11px;color:#444"><span>incl. VAT (${tx.vatRate!=null?tx.vatRate:cfg.vatRate}%)</span><span>${fmt(tx.vat)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between"><span>Paid via</span><span>${esc(tx.method)}</span></div>
+      <hr>
+      <div style="text-align:center">${new Date(tx.time).toLocaleString('en-GB')}</div>
+      <div style="text-align:center;margin-top:8px">${barSvg}</div>
+      <div style="text-align:center;font-size:10px;color:#555;margin-top:2px">Ref: ${esc(saleRef)}</div>
+      ${cfg.receiptFooter?`<div style="text-align:center">${esc(cfg.receiptFooter)}</div>`:''}
+    </div>`;
+  },
+  async printReceipt(txId){
+    const tx=DB.get('txns').find(t=>t.id===txId);if(!tx){toast('Transaction not found','⚠️','t-o');return;}
+    const cfg=DB.get('cfg');
+    if(cfg.printerMode==='serial'){
+      const ok=await this.writeText(this.receiptText(tx));
+      if(ok)toast('Sent to printer','🖨️','t-g');
+      return;
+    }
+    // browser mode: open a small print-formatted window
+    const w=window.open('','_blank','width=360,height=600');
+    if(!w){toast('Pop-up blocked — allow pop-ups to print','⚠️','t-o');return;}
+    w.document.write(`<html><head><title>Receipt</title></head><body onload="window.print()">${this.receiptHTML(tx)}</body></html>`);
+    w.document.close();
+  },
+  async testPrint(){
+    const cfg=DB.get('cfg');
+    if(cfg.printerMode==='serial'){
+      const ok=await this.writeText('CBSystem PRO\nTest print OK\n\n\n');
+      if(ok)toast('Test sent to printer','🖨️','t-g');
+    }else{
+      const w=window.open('','_blank','width=360,height=300');
+      if(!w){toast('Pop-up blocked — allow pop-ups to print','⚠️','t-o');return;}
+      w.document.write('<html><body onload="window.print()" style="font-family:monospace;text-align:center;padding:20px">CBSystem PRO<br>Test print OK</body></html>');
+      w.document.close();
+    }
+  },
+};
+
+// ═══════════════════════════════════════
+// CUSTOMER DISPLAY — opens in its own popup window (e.g. dragged to a
+// second, customer-facing monitor) instead of overlaying the till screen.
+// Because window.open('') inherits the opener's origin, this window's
+// DOM can be driven directly from here with no extra sync plumbing.
+// ═══════════════════════════════════════
+let cdWindow=null,cdIdleTimer=null,cdSlideTimer=null,cdSlideIdx=0,cdCloseWatcher=null;
+const CD_STYLE=`
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;background:#000;color:#fff;font-family:'DM Sans',sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column}
+  #cd-screensaver{display:none;position:absolute;inset:0;background:#000;align-items:center;justify-content:center;z-index:2;cursor:pointer}
+  #cd-store-name{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:#ff6b35;letter-spacing:2px;padding:20px 40px 10px;flex-shrink:0}
+  #cd-items-wrap{flex:1;overflow-y:auto;padding:0 40px}
+  .cd-line{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #222;font-size:1.3rem}
+  .cd-line .cd-qty{color:#888;font-size:0.9rem;margin-left:8px}
+  #cd-vat-row{padding:6px 40px 0;display:flex;justify-content:space-between;font-size:1rem;color:#999;flex-shrink:0}
+  #cd-total-row{padding:16px 40px 22px;border-top:3px solid #ff6b35;display:flex;justify-content:space-between;align-items:baseline;flex-shrink:0}
+  #cd-total-label{font-size:1.4rem;color:#aaa}
+  #cd-total-value{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:#ffd700}
+  #cd-close{position:fixed;bottom:14px;right:16px;background:rgba(255,255,255,0.08);border:1px solid #444;color:#888;border-radius:8px;padding:6px 14px;font-size:0.72rem;cursor:pointer;z-index:3}
+`;
+function openCD(){
+  if(cdWindow&&!cdWindow.closed){cdWindow.focus();renderCDCart();return;}
+  cdWindow=window.open('','cbspro_customer_display','width=1024,height=720,menubar=no,toolbar=no,location=no,status=no');
+  if(!cdWindow){toast('Pop-up blocked — allow pop-ups for this page to open the customer display','⚠️','t-o');return;}
+  cdWindow.document.write(`<!DOCTYPE html><html><head><title>Customer Display — ${esc(DB.get('cfg').storeName||'CBSystem')}</title><style>${CD_STYLE}</style></head>
+    <body>
+      <div id="cd-screensaver"></div>
+      <div id="cd-store-name"></div>
+      <div id="cd-items-wrap"></div>
+      <div id="cd-vat-row" style="display:none"><span id="cd-vat-label">VAT</span><span id="cd-vat-value">£0.00</span></div>
+      <div id="cd-total-row"><div id="cd-total-label">Total</div><div id="cd-total-value">£0.00</div></div>
+      <button id="cd-close" onclick="window.close()">✕ Close</button>
+    </body></html>`);
+  cdWindow.document.close();
+  cdWindow.document.getElementById('cd-screensaver').onclick=hideCDScreensaver;
+  clearInterval(cdCloseWatcher);
+  cdCloseWatcher=setInterval(()=>{
+    if(!cdWindow||cdWindow.closed){clearTimeout(cdIdleTimer);clearInterval(cdSlideTimer);clearInterval(cdCloseWatcher);cdWindow=null;}
+  },1000);
+  renderCDCart();
+}
+function closeCD(){cdWindow?.close();cdWindow=null;clearTimeout(cdIdleTimer);clearInterval(cdSlideTimer);clearInterval(cdCloseWatcher);}
+window.addEventListener('beforeunload',()=>{try{cdWindow?.close();}catch(e){}});
+function armCDIdle(){
+  if(!cdWindow||cdWindow.closed)return;
+  clearTimeout(cdIdleTimer);
+  hideCDScreensaver();
+  if(!S.cart.length)cdIdleTimer=setTimeout(showCDScreensaver,15000);
+}
+function showCDScreensaver(){
+  if(!cdWindow||cdWindow.closed)return;
+  const media=DB.get('cfg').customerMedia||[];
+  const wrap=cdWindow.document.getElementById('cd-screensaver');
+  if(!wrap||!media.length)return;
+  cdSlideIdx=0;renderCDSlide();
+  wrap.style.display='flex';
+  clearInterval(cdSlideTimer);
+  const secs=Math.max(3,DB.get('cfg').customerMediaInterval||8);
+  cdSlideTimer=setInterval(()=>{cdSlideIdx=(cdSlideIdx+1)%media.length;renderCDSlide();},secs*1000);
+}
+function renderCDSlide(){
+  if(!cdWindow||cdWindow.closed)return;
+  const media=DB.get('cfg').customerMedia||[];const m=media[cdSlideIdx];
+  const wrap=cdWindow.document.getElementById('cd-screensaver');if(!wrap||!m)return;
+  wrap.innerHTML=m.type==='video'
+    ?`<video src="${m.dataUrl}" autoplay muted loop playsinline style="max-width:100%;max-height:100%;object-fit:contain"></video>`
+    :`<img src="${m.dataUrl}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+}
+function hideCDScreensaver(){
+  if(!cdWindow||cdWindow.closed)return;
+  const wrap=cdWindow.document.getElementById('cd-screensaver');
+  if(wrap){wrap.style.display='none';wrap.innerHTML='';}
+  clearInterval(cdSlideTimer);
+}
+function renderCDCart(){
+  if(!cdWindow||cdWindow.closed)return;
+  const doc=cdWindow.document;
+  const nameEl=doc.getElementById('cd-store-name');if(nameEl)nameEl.textContent=DB.get('cfg').storeName||'CBSystem';
+  const items=doc.getElementById('cd-items-wrap');
+  const totEl=doc.getElementById('cd-total-value');
+  const vatRow=doc.getElementById('cd-vat-row'),vatVal=doc.getElementById('cd-vat-value');
+  if(!items||!totEl)return;
+  armCDIdle();
+  if(!S.cart.length){
+    items.innerHTML='<div style="text-align:center;padding:60px 0;color:#444;font-size:1.2rem">Waiting for items…</div>';
+    totEl.textContent=fmt(0);
+    if(vatRow)vatRow.style.display='none';
+    return;
+  }
+  const t=cartTotals();
+  items.innerHTML=S.cart.map(c=>`<div class="cd-line"><span>${esc(c.name)}<span class="cd-qty">×${c.qty}</span></span><span>${fmt(c.price*c.qty)}</span></div>`).join('');
+  if(vatRow&&vatVal){vatRow.style.display='flex';vatVal.textContent=fmt(t.vat);}
+  totEl.textContent=fmt(t.total);
+}
+
+
+// ═══════════════════════════════════════
+// STOCK STATION
+// ═══════════════════════════════════════
+function buildStock(){
+  const m=document.getElementById('main');const tb=document.getElementById('t-tabs');
+  const mkTab=(id,label,fn)=>`<button class="tab" onclick="switchV('${id}',this);${fn}()">${label}</button>`;
+  tb.innerHTML=[mkTab('v-intake','📥 Intake','renderIntake'),mkTab('v-transfer','🔀 Transfer','renderTransfer'),mkTab('v-stocktake','📋 Stocktake','renderStocktake')].join('');
+  m.innerHTML=`
+    <div class="view" id="v-intake" style="display:none;flex-direction:column;"><div class="vscroll" id="intake-body"></div></div>
+    <div class="view" id="v-transfer" style="display:none;flex-direction:column;"><div class="vscroll" id="transfer-body"></div></div>
+    <div class="view" id="v-stocktake" style="display:none;flex-direction:column;"><div class="vscroll" id="stocktake-body"></div></div>`;
+  switchV('v-intake',tb.querySelector('.tab'));renderIntake();
+}
+
+function locOptions(selected){return DB.get('locations').map(l=>`<option value="${l.id}"${l.id===selected?' selected':''}>${esc(l.name)}</option>`).join('');}
+
+// INTAKE
+function renderIntake(){
+  const el=document.getElementById('intake-body');if(!el)return;
+  const locs=DB.get('locations');const loc=S.activeLoc||defaultLoc();
+  const recent=DB.get('movements').filter(m=>m.type==='intake').slice(-20).reverse();
+  el.innerHTML=`
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-t">Receive Stock</div>
+        <div class="sf"><label class="sl">Location</label><select class="si-s" id="in-loc" onchange="S.activeLoc=this.value">${locOptions(loc)}</select></div>
+        <div class="sf"><label class="sl">Barcode / search</label><input class="si" id="in-scan" placeholder="Scan or type barcode or name, then Enter…" autocomplete="off"></div>
+        <div id="in-prod-info" style="margin:8px 0;min-height:40px"></div>
+      </div>
+      <div class="card">
+        <div class="card-t">Today's Intake</div>
+        ${recent.length?`<table class="data-t"><thead><tr><th>Product</th><th>Qty</th><th>Location</th><th>Time</th></tr></thead><tbody>${recent.map(r=>`<tr><td>${esc(r.prodName)}</td><td style="color:var(--green)">+${r.qty}</td><td>${esc(r.locName)}</td><td style="font-size:0.65rem;color:var(--text2)">${new Date(r.time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">No intake recorded today.</div>'}
+      </div>
+    </div>`;
+  let foundProd=null;let lookupToken=0;
+  const scanEl=document.getElementById('in-scan');
+  const info=document.getElementById('in-prod-info');
+  const renderFound=p=>{
+    foundProd=p;
+    info.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:8px"><span style="font-weight:600">${esc(p.name)}</span><span style="font-size:0.7rem;color:var(--text2);margin-left:8px">${esc(p.category||'')}</span></div>
+      <div class="sf"><label class="sl">Quantity to receive</label><input type="number" class="si" id="in-qty" min="1" value="1"></div>
+      <div class="btn-row"><button class="btn btn-g" onclick="doIntake()">✅ Receive</button></div>`;
+  };
+  const renderNotFound=(bc,hint)=>{
+    foundProd=null;
+    info.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:0.72rem;color:var(--text2);margin-bottom:8px">${hint||'No match in your catalog.'} Add it as a new product:</div>
+      <div class="field-row"><div class="sf"><label class="sl">Product Name *</label><input class="si" id="in-new-name" value=""></div><div class="sf"><label class="sl">Category</label><input class="si" id="in-new-cat" value=""></div></div>
+      <div class="field-row"><div class="sf"><label class="sl">Cost Price</label><input type="number" class="si" id="in-new-cost" min="0" step="0.01" value=""></div><div class="sf"><label class="sl">Selling Price *</label><input type="number" class="si" id="in-new-price" min="0" step="0.01" value=""></div></div>
+      <div class="sf"><label class="sl">Quantity to receive</label><input type="number" class="si" id="in-qty" min="1" value="1"></div>
+      <div class="s-row"><span style="font-size:0.77rem">Vatable (VAT applies to this item)</span><label class="tog"><input type="checkbox" id="in-new-vat" checked><span class="tog-sl"></span></label></div>
+      <div class="s-row"><span style="font-size:0.77rem">🔞 Age Restricted (18+ — requires age verification at till)</span><label class="tog"><input type="checkbox" id="in-new-age"><span class="tog-sl"></span></label></div>
+      <div class="btn-row"><button class="btn btn-g" onclick="doIntakeNew('${esc(bc)}')">➕ Add Product &amp; Receive</button></div>
+    </div>`;
+  };
+  const onQuery=async()=>{
+    const bc=scanEl.value.trim();
+    if(!bc){info.innerHTML='';foundProd=null;return;}
+    const local=prodByBarcode(bc)||DB.get('products').find(p=>p.name.toLowerCase().includes(bc.toLowerCase()));
+    if(local){renderFound(local);return;}
+    // Not in local catalog — try the global EAN lookup (barcode-shaped input only)
+    if(/^\d{6,14}$/.test(bc)&&DB.get('cfg').eanLookupEnabled){
+      info.innerHTML='<div style="font-size:0.72rem;color:var(--text2)">🌐 Looking up barcode online…</div>';
+      const myToken=++lookupToken;
+      const hit=await lookupEAN(bc);
+      if(myToken!==lookupToken)return; // a newer scan superseded this lookup
+      if(scanEl.value.trim()!==bc)return;
+      renderNotFound(bc,hit?`Found online: "${esc(hit.name)}".`:'Not found locally or online.');
+      if(hit){
+        const nameEl=document.getElementById('in-new-name');if(nameEl)nameEl.value=hit.name||'';
+        const catEl=document.getElementById('in-new-cat');if(catEl)catEl.value=hit.category||'';
+        window._eanImageUrl=hit.imageUrl||null;
+      }
+    }else{
+      renderNotFound(bc);
+    }
+  };
+  if(scanEl){
+    let deb;
+    scanEl.addEventListener('input',()=>{clearTimeout(deb);deb=setTimeout(onQuery,350);});
+    scanEl.addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(deb);if(foundProd)doIntake();else onQuery();}});
+  }
+  window._intakeProd=()=>foundProd;
+}
+
+function doIntake(){
+  const loc=document.getElementById('in-loc')?.value||defaultLoc();
+  const qty=parseInt(document.getElementById('in-qty')?.value)||1;
+  const p=window._intakeProd?.();
+  if(!p){toast('No product selected','⚠️','t-o');return;}
+  const stock=DB.get('stock');
+  if(!stock[loc])stock[loc]={};
+  stock[loc][p.id]=(stock[loc][p.id]||0)+qty;
+  const mvs=DB.get('movements');
+  mvs.push({type:'intake',prodId:p.id,prodName:p.name,qty,locId:loc,locName:locName(loc),staff:S.user?.name,time:Date.now()});
+  DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+  toast(qty+'× '+p.name+' received into '+locName(loc),'📥','t-g');
+  document.getElementById('in-scan').value='';document.getElementById('in-prod-info').innerHTML='';
+  renderIntake();
+}
+
+function doIntakeNew(barcode){
+  const loc=document.getElementById('in-loc')?.value||defaultLoc();
+  const name=document.getElementById('in-new-name')?.value.trim();
+  const price=parseFloat(document.getElementById('in-new-price')?.value);
+  const cost=parseFloat(document.getElementById('in-new-cost')?.value)||0;
+  const cat=document.getElementById('in-new-cat')?.value.trim()||'General';
+  const qty=parseInt(document.getElementById('in-qty')?.value)||1;
+  const vatable=document.getElementById('in-new-vat')?.checked!==false;
+  const ageRestricted=document.getElementById('in-new-age')?.checked===true;
+  if(!name||isNaN(price)){toast('Product name and selling price are required','⚠️','t-o');return;}
+  const prods=DB.get('products');
+  const p={id:DB.nid(),name,barcode:barcode||'',category:cat,price,cost,reorderLevel:0,trackStock:true,vatable,ageRestricted,imageUrl:window._eanImageUrl||null};
+  window._eanImageUrl=null;
+  prods.push(p);DB.set('products',prods);
+  const stock=DB.get('stock');
+  if(!stock[loc])stock[loc]={};
+  stock[loc][p.id]=(stock[loc][p.id]||0)+qty;
+  const mvs=DB.get('movements');
+  mvs.push({type:'intake',prodId:p.id,prodName:p.name,qty,locId:loc,locName:locName(loc),staff:S.user?.name,time:Date.now()});
+  DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+  toast('New product created & '+qty+'× received into '+locName(loc),'📥','t-g');
+  document.getElementById('in-scan').value='';document.getElementById('in-prod-info').innerHTML='';
+  renderIntake();
+}
+
+// TRANSFER
+function renderTransfer(){
+  const el=document.getElementById('transfer-body');if(!el)return;
+  const locs=DB.get('locations');const locA=locs[0]?.id;const locB=locs[1]?.id;
+  const recent=DB.get('movements').filter(m=>m.type==='transfer').slice(-15).reverse();
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-t">Transfer Stock Between Locations</div>
+      <div class="field-row">
+        <div class="sf"><label class="sl">From</label><select class="si-s" id="tr-from">${locOptions(locA)}</select></div>
+        <div class="sf"><label class="sl">To</label><select class="si-s" id="tr-to">${locOptions(locB)}</select></div>
+      </div>
+      <div class="sf"><label class="sl">Barcode / Product</label><input class="si" id="tr-scan" placeholder="Scan or type barcode…" autocomplete="off"></div>
+      <div id="tr-prod-info" style="min-height:36px;margin:6px 0"></div>
+      <div id="tr-qty-row" style="display:none">
+        <div class="sf"><label class="sl">Quantity</label><input type="number" class="si" id="tr-qty" min="1" value="1"></div>
+        <div class="sf"><label class="sl">Notes (optional)</label><input class="si" id="tr-note" placeholder="e.g. Restocking floor from stockroom"></div>
+        <div class="btn-row"><button class="btn btn-b" onclick="doTransfer()">🔀 Transfer</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-t">Recent Transfers</div>
+      ${recent.length?`<table class="data-t"><thead><tr><th>Product</th><th>Qty</th><th>From → To</th><th>Staff</th><th>Time</th></tr></thead><tbody>${recent.map(r=>`<tr><td>${esc(r.prodName)}</td><td>${r.qty}</td><td style="font-size:0.68rem">${esc(r.fromName)} → ${esc(r.locName)}</td><td style="font-size:0.65rem">${esc(r.staff||'')}</td><td style="font-size:0.63rem;color:var(--text2)">${new Date(r.time).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">No recent transfers.</div>'}
+    </div>`;
+  let trProd=null;
+  const sc=document.getElementById('tr-scan');
+  if(sc){
+    sc.addEventListener('input',()=>{
+      const v=sc.value.trim();
+      trProd=v?prodByBarcode(v)||DB.get('products').find(p=>p.name.toLowerCase().includes(v.toLowerCase())):null;
+      const info=document.getElementById('tr-prod-info');const row=document.getElementById('tr-qty-row');
+      if(trProd){if(info)info.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px"><span style="font-weight:600">${esc(trProd.name)}</span></div>`;if(row)row.style.display='block';}
+      else{if(info)info.innerHTML='';if(row)row.style.display='none';}
+    });
+  }
+  window._trProd=()=>trProd;
+}
+
+function doTransfer(){
+  const from=document.getElementById('tr-from')?.value;
+  const to=document.getElementById('tr-to')?.value;
+  const qty=parseInt(document.getElementById('tr-qty')?.value)||1;
+  const note=document.getElementById('tr-note')?.value||'';
+  const p=window._trProd?.();
+  if(!p){toast('No product selected','⚠️','t-o');return;}
+  if(from===to){toast('From and To must differ','⚠️','t-o');return;}
+  const stock=DB.get('stock');
+  const avail=(stock[from]||{})[p.id]||0;
+  if(avail<qty){toast('Only '+avail+' available in '+locName(from),'❌','t-r');return;}
+  if(!stock[from])stock[from]={};if(!stock[to])stock[to]={};
+  stock[from][p.id]=(stock[from][p.id]||0)-qty;
+  stock[to][p.id]=(stock[to][p.id]||0)+qty;
+  const mvs=DB.get('movements');
+  mvs.push({type:'transfer',prodId:p.id,prodName:p.name,qty,locId:to,locName:locName(to),fromId:from,fromName:locName(from),staff:S.user?.name,note,time:Date.now()});
+  DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+  toast(qty+'× '+p.name+': '+locName(from)+' → '+locName(to),'🔀','t-b');
+  document.getElementById('tr-scan').value='';document.getElementById('tr-qty').value='1';
+  renderTransfer();
+}
+
+// STOCKTAKE
+function renderStocktake(){
+  const el=document.getElementById('stocktake-body');if(!el)return;
+  const loc=S.activeLoc||defaultLoc();
+  const prods=DB.get('products');const stock=DB.get('stock');
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-t">Physical Count — Stocktake</div>
+      <div class="field-row" style="margin-bottom:12px">
+        <div><label class="sl">Location</label><select class="si-s" id="stk-loc" onchange="S.activeLoc=this.value;renderStocktake()">${locOptions(loc)}</select></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn btn-gold" onclick="finalizeStocktake()">✅ Finalise &amp; Apply</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 100px 100px;gap:8px;padding:4px 0;border-bottom:2px solid var(--border);font-size:0.62rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px">
+        <span>Product</span><span>System</span><span>Count</span>
+      </div>
+      ${prods.map(p=>{
+        const sys=(stock[loc]||{})[p.id]||0;
+        return`<div class="stk-row">
+          <div><div style="font-size:0.77rem;font-weight:600">${esc(p.name)}</div><div style="font-size:0.58rem;color:var(--text2)">${esc(p.barcode||'')}</div></div>
+          <div style="font-family:'JetBrains Mono';font-size:0.8rem;color:var(--text2)">${sys}</div>
+          <input type="number" class="si" min="0" data-pid="${p.id}" placeholder="${sys}" style="padding:4px 7px;font-size:0.78rem">
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function finalizeStocktake(){
+  const loc=document.getElementById('stk-loc')?.value||defaultLoc();
+  const stock=DB.get('stock');const mvs=DB.get('movements');
+  if(!stock[loc])stock[loc]={};
+  let changed=0;
+  document.querySelectorAll('[data-pid]').forEach(inp=>{
+    const pid=inp.dataset.pid;const val=inp.value.trim();
+    if(val==='')return;
+    const count=parseInt(val);if(isNaN(count)||count<0)return;
+    const sys=(stock[loc][pid]||0);const diff=count-sys;
+    if(diff===0)return;
+    stock[loc][pid]=count;
+    mvs.push({type:'adjustment',prodId:pid,prodName:prodById(pid)?.name||pid,qty:diff,locId:loc,locName:locName(loc),staff:S.user?.name,note:'Stocktake',time:Date.now()});
+    changed++;
+  });
+  if(!changed){toast('No changes to apply','ℹ️','t-b');return;}
+  DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+  toast(changed+' adjustment(s) applied','✅','t-g');renderStocktake();
+}
+
+// ═══════════════════════════════════════
+// MANAGER STATION
+// ═══════════════════════════════════════
+function buildManager(){
+  const m=document.getElementById('main');const tb=document.getElementById('t-tabs');
+  const mkTab=(id,label,fn)=>`<button class="tab" onclick="switchV('${id}',this);${fn}()">${label}</button>`;
+  tb.innerHTML=[
+    mkTab('v-dash','📊 Dashboard','renderDash'),
+    mkTab('v-products','🏷 Products','renderProducts'),
+    mkTab('v-reports','📈 Reports','renderReports'),
+    mkTab('v-users','👤 Users','renderUsers'),
+  ].join('');
+  m.innerHTML=`
+    <div class="view" id="v-dash"     style="display:none;flex-direction:column;"><div class="vscroll" id="dash-body"></div></div>
+    <div class="view" id="v-products" style="display:none;flex-direction:column;"><div class="vscroll" id="products-body"></div></div>
+    <div class="view" id="v-reports"  style="display:none;flex-direction:column;"><div class="vscroll" id="reports-body"></div></div>
+    <div class="view" id="v-users"    style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>`;
+  switchV('v-dash',tb.querySelector('.tab'));renderDash();
+}
+
+// DASHBOARD
+function renderDash(){
+  const el=document.getElementById('dash-body');if(!el)return;
+  const txns=DB.get('txns');const prods=DB.get('products');const stock=DB.get('stock');
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayTxns=txns.filter(t=>t.time>=today.getTime()&&!t.refunded);
+  const todaySales=todayTxns.reduce((s,t)=>s+t.total,0);
+  const todayItems=todayTxns.reduce((s,t)=>s+t.items.reduce((a,i)=>a+i.qty,0),0);
+  const allStock=prods.map(p=>({p,total:totalStock(p.id)}));
+  const lowStock=allStock.filter(({p,total})=>p.trackStock&&total<=p.reorderLevel);
+  const stockVal=allStock.reduce((s,{p,total})=>s+p.cost*total,0);
+  const topProds=Object.entries(
+    txns.filter(t=>!t.refunded).flatMap(t=>t.items).reduce((a,i)=>{a[i.name]=(a[i.name]||0)+i.qty;return a;},{})
+  ).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Today's cost and gross profit
+  const todayCost=todayTxns.flatMap(t=>t.items).reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);
+  const todayGP=todaySales-todayCost;
+  el.innerHTML=`
+    ${lowStock.length?`<div style="background:rgba(255,69,96,0.1);border-bottom:1px solid rgba(255,69,96,0.25);padding:9px 14px;font-size:0.73rem;color:var(--red);cursor:pointer" onclick="switchV('v-reports',document.querySelector('#t-tabs .tab:nth-child(3)'));renderReports();setTimeout(()=>showReport('stock',document.querySelector('#reports-body .tab:nth-child(2)')),100)">⚠️ <strong>${lowStock.length} product(s)</strong> at or below minimum stock level — tap to view in Reports</div>`:''}
+    <div class="dash-g">
+      <div class="dc"><div class="dc-l">Today's Sales</div><div class="dc-v">${fmt(todaySales)}</div><div class="dc-s">${todayTxns.length} transaction(s)</div></div>
+      <div class="dc"><div class="dc-l">Today's Gross Profit</div><div class="dc-v" style="color:var(--green)">${fmt(todayGP)}</div><div class="dc-s">after cost of goods</div></div>
+      <div class="dc"><div class="dc-l">Items Sold Today</div><div class="dc-v">${todayItems}</div><div class="dc-s">across ${todayTxns.length} sale(s)</div></div>
+      <div class="dc"><div class="dc-l">Low Stock Alerts</div><div class="dc-v" style="color:${lowStock.length?'var(--red)':'var(--green)'}">${lowStock.length}</div><div class="dc-s">product(s) at or below reorder level</div></div>
+      <div class="dc"><div class="dc-l">Total Stock Value</div><div class="dc-v" style="color:var(--green)">${fmt(stockVal)}</div><div class="dc-s">at cost price</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-t">⚠️ Low Stock</div>
+        ${lowStock.length?`<table class="data-t"><thead><tr><th>Product</th><th>In Stock</th><th>Reorder At</th></tr></thead><tbody>${lowStock.map(({p,total})=>`<tr><td>${esc(p.name)}</td><td style="color:var(--red);font-weight:600">${total}</td><td>${p.reorderLevel}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">✅ All stock is healthy.</div>'}
+      </div>
+      <div class="card">
+        <div class="card-t">🏆 Top Products</div>
+        ${topProds.length?`<table class="data-t"><thead><tr><th>Product</th><th>Units Sold</th></tr></thead><tbody>${topProds.map(([name,qty])=>`<tr><td>${esc(name)}</td><td style="font-weight:600;color:var(--accent)">${qty}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">No sales recorded yet.</div>'}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-t">Recent Transactions</div>
+      ${txns.slice(-10).reverse().map(t=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.74rem"><span>${new Date(t.time).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span><span>${esc(t.staff||'')}</span><span>${t.items?.length} item(s)</span><span style="font-weight:700;color:${t.refunded?'var(--red)':'var(--accent)'}">${t.refunded?'REFUNDED':fmt(t.total)}</span></div>`).join('')||'<div style="color:var(--text2);font-size:0.74rem">No transactions yet.</div>'}
+    </div>`;
+}
+
+// PRODUCTS
+function renderProducts(){
+  const el=document.getElementById('products-body');if(!el)return;
+  const prods=DB.get('products');
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <input class="srch" id="prod-search" placeholder="Search by name, barcode or category…" oninput="renderProductsTable(this.value)" style="max-width:320px">
+      <button class="btn btn-a" onclick="openProductModal(null)">+ New Product</button>
+    </div>
+    <div class="card" id="prod-tbl-wrap">
+      <table class="data-t" id="prod-tbl">
+        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Cost</th><th>Price</th><th>Total Stock</th><th>Reorder</th><th></th></tr></thead>
+        <tbody id="prod-tbody"></tbody>
+      </table>
+    </div>`;
+  renderProductsTable('');
+}
+
+function renderProductsTable(filter){
+  const prods=DB.get('products');
+  const f=filter.toLowerCase();
+  const rows=prods.filter(p=>!f||p.name.toLowerCase().includes(f)||p.barcode?.includes(f)||p.category?.toLowerCase().includes(f));
+  const body=document.getElementById('prod-tbody');if(!body)return;
+  body.innerHTML=rows.map(p=>{
+    const total=totalStock(p.id);const low=p.trackStock&&total<=p.reorderLevel;
+    return`<tr>
+      <td style="font-weight:600">${esc(p.name)}</td>
+      <td style="font-family:'JetBrains Mono';font-size:0.68rem">${esc(p.barcode||'—')}</td>
+      <td>${esc(p.category||'—')}</td>
+      <td>${fmt(p.cost||0)}</td>
+      <td style="color:var(--accent);font-weight:600">${fmt(p.price)}</td>
+      <td style="color:${low?'var(--red)':'var(--text)'}${low?';font-weight:700':''}">${total}${low?' ⚠️':''}</td>
+      <td>${p.trackStock?(p.reorderLevel||0):'—'}</td>
+      <td><button class="btn btn-o btn-sm" onclick="openProductModal('${p.id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openProductModal(id){
+  const p=id?prodById(id):null;
+  showModal(`<div class="modal-t">${p?'Edit':'New'} Product</div>
+    <div class="sf"><label class="sl">Product Name *</label><input class="si" id="pm-name" value="${esc(p?.name||'')}"></div>
+    <div class="sf"><label class="sl">Barcode</label><input class="si" id="pm-bc" value="${esc(p?.barcode||'')}" placeholder="EAN-13, EAN-8, UPC..."></div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Category</label><input class="si" id="pm-cat" value="${esc(p?.category||'')}"></div>
+      <div class="sf"><label class="sl">Selling Price *</label><input type="number" class="si" id="pm-price" value="${p?.price||''}" min="0" step="0.01"></div>
+    </div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Cost Price</label><input type="number" class="si" id="pm-cost" value="${p?.cost||''}" min="0" step="0.01"></div>
+      <div class="sf"><label class="sl">Reorder Level</label><input type="number" class="si" id="pm-reorder" value="${p?.reorderLevel||0}" min="0"></div>
+    </div>
+    <div class="s-row"><span style="font-size:0.77rem">Track stock for this product</span><label class="tog"><input type="checkbox" id="pm-track"${p?.trackStock!==false?' checked':''}><span class="tog-sl"></span></label></div>
+    <div class="s-row"><span style="font-size:0.77rem">Vatable (VAT applies to this item)</span><label class="tog"><input type="checkbox" id="pm-vat"${prodVatable(p)?' checked':''}><span class="tog-sl"></span></label></div>
+    <div class="s-row"><span style="font-size:0.77rem">🔞 Age Restricted (18+) — triggers Challenge 25 on till</span><label class="tog"><input type="checkbox" id="pm-age"${p?.ageRestricted?' checked':''}><span class="tog-sl"></span></label></div>
+    <div style="font-size:0.62rem;color:var(--text2);margin:-6px 0 8px">Defaults from the product's category (set category VAT defaults in Settings) — tick/untick here to override just this product.</div>
+    <div class="sf" style="margin-top:6px">
+      <label class="sl">Product Image URL (optional — auto-filled from barcode lookup)</label>
+      <div style="display:flex;gap:7px;align-items:center">
+        <input class="si" id="pm-img" value="${esc(p?.imageUrl||'')}" placeholder="https://… or leave blank" style="flex:1">
+        ${p?.imageUrl?`<img src="${esc(p.imageUrl)}" style="width:44px;height:44px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--bg2)" onerror="this.style.display='none'" id="pm-img-preview">`:'<div id="pm-img-preview" style="width:44px;height:44px;border-radius:6px;border:1px dashed var(--border);background:var(--bg2)"></div>'}
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:6px">
+      ${p?`<button class="btn btn-r" onclick="deleteProduct('${p.id}')">Delete</button>`:''}
+      <button class="btn btn-o" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-a" onclick="saveProduct('${id||''}')">Save</button>
+    </div>`);
+}
+
+function saveProduct(id){
+  const name=document.getElementById('pm-name')?.value.trim();
+  const price=parseFloat(document.getElementById('pm-price')?.value);
+  if(!name||isNaN(price)){toast('Name and price are required','⚠️','t-o');return;}
+  const prods=DB.get('products');
+  const data={
+    name,barcode:document.getElementById('pm-bc')?.value.trim()||'',
+    category:document.getElementById('pm-cat')?.value.trim()||'General',
+    price,cost:parseFloat(document.getElementById('pm-cost')?.value)||0,
+    reorderLevel:parseInt(document.getElementById('pm-reorder')?.value)||0,
+    trackStock:document.getElementById('pm-track')?.checked!==false,
+    vatable:document.getElementById('pm-vat')?.checked!==false,
+    imageUrl:document.getElementById('pm-img')?.value.trim()||null,
+    ageRestricted:document.getElementById('pm-age')?.checked||false,
+  };
+  if(id){const idx=prods.findIndex(p=>p.id===id);if(idx>-1){prods[idx]={...prods[idx],...data};}}
+  else{data.id=DB.nid();prods.push(data);}
+  DB.set('products',prods);closeModal();renderProducts();toast((id?'Updated':'Created')+': '+name,'✅','t-g');
+}
+
+function deleteProduct(id){
+  if(!confirm('Delete this product?'))return;
+  const prods=DB.get('products').filter(p=>p.id!==id);
+  DB.set('products',prods);closeModal();renderProducts();toast('Product deleted','🗑️','t-o');
+}
+
+// REPORTS
+function renderReports(){
+  const el=document.getElementById('reports-body');if(!el)return;
+  el.innerHTML=`
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="tab on" onclick="showReport('sales',this)">💰 Sales</button>
+      <button class="tab" onclick="showReport('cost',this)">📊 Cost &amp; Profit</button>
+      <button class="tab" onclick="showReport('stock',this)">📦 Stock &amp; Value</button>
+      <button class="tab" onclick="showReport('movements',this)">🔀 Movements</button>
+      <button class="tab" onclick="showReport('reconcile',this)">🧾 Reconciliation</button>
+    </div>
+    <div id="report-content"></div>`;
+  showReport('sales',el.querySelector('.tab.on'));
+}
+
+function showReport(type,btn){
+  document.querySelectorAll('#reports-body .tab').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');
+  const el=document.getElementById('report-content');if(!el)return;
+  const txns=DB.get('txns');const prods=DB.get('products');const stock=DB.get('stock');const mvs=DB.get('movements');
+  if(type==='sales'){
+    const live=txns.filter(t=>!t.refunded);
+    const byDay={};live.forEach(t=>{const d=new Date(t.time).toLocaleDateString('en-GB');byDay[d]=(byDay[d]||0)+t.total;});
+    const totalRev=live.reduce((s,t)=>s+t.total,0);
+    const totalCost=live.flatMap(t=>t.items).reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);
+    const totalVat=live.reduce((s,t)=>s+txnVAT(t).vat,0);
+    const now=new Date();
+    const todayISO=now.toISOString().split('T')[0];
+    const monthISO=todayISO.slice(0,7);
+    // Build per-day cost and profit breakdown
+    const byDayCost={};live.forEach(t=>{const d=new Date(t.time).toLocaleDateString('en-GB');const cost=t.items.reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);byDayCost[d]=(byDayCost[d]||0)+cost;});
+    const grossProfit=totalRev-totalCost;
+    const margin=totalRev>0?((grossProfit/totalRev)*100).toFixed(1):0;
+    el.innerHTML=`
+      <div class="dash-g">
+        <div class="dc"><div class="dc-l">Total Revenue</div><div class="dc-v">${fmt(totalRev)}</div></div>
+        <div class="dc"><div class="dc-l">Total Cost</div><div class="dc-v" style="color:var(--text2)">${fmt(totalCost)}</div></div>
+        <div class="dc"><div class="dc-l">Gross Profit</div><div class="dc-v" style="color:var(--green)">${fmt(grossProfit)}</div><div class="dc-s">Margin: ${margin}%</div></div>
+        <div class="dc"><div class="dc-l">VAT Collected</div><div class="dc-v" style="color:var(--blue)">${fmt(totalVat)}</div></div>
+        <div class="dc"><div class="dc-l">Total Transactions</div><div class="dc-v">${live.length}</div></div>
+        <div class="dc"><div class="dc-l">Refunds</div><div class="dc-v" style="color:var(--red)">${txns.filter(t=>t.refunded).length}</div></div>
+      </div>
+      <div class="card">
+        <div class="card-t">Sales + Cost + Profit by Day</div>
+        <table class="data-t"><thead><tr><th>Date</th><th>Revenue</th><th>Cost</th><th>Gross Profit</th><th>Margin</th></tr></thead>
+        <tbody>${Object.entries(byDay).reverse().map(([d,rev])=>{const cost=byDayCost[d]||0;const gp=rev-cost;const mg=rev>0?((gp/rev)*100).toFixed(1):0;return`<tr><td>${d}</td><td style="color:var(--accent);font-weight:600">${fmt(rev)}</td><td style="color:var(--text2)">${fmt(cost)}</td><td style="color:var(--green);font-weight:600">${fmt(gp)}</td><td style="color:var(--text2)">${mg}%</td></tr>`;}).join('')||'<tr><td colspan="5" style="color:var(--text2)">No data</td></tr>'}</tbody></table>
+        <div style="text-align:right;margin-top:8px"><button class="btn btn-o btn-sm" onclick="exportSalesCSV()">⬇️ Export All (CSV)</button></div>
+      </div>
+      <div class="card">
+        <div class="card-t">📊 Sales Record — Excel Export</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Each export includes Net, VAT and Gross totals per transaction plus a period summary row. Downloads as a real .xlsx workbook when the Excel library has loaded; otherwise falls back to CSV automatically.</p>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="sf"><label class="sl">Daily</label><input type="date" class="si" id="exp-daily-date" value="${todayISO}"></div>
+          <div class="sf" style="flex:0"><button class="btn btn-o btn-sm" onclick="exportSalesExcel('daily')" style="white-space:nowrap">⬇️ Daily Excel</button></div>
+        </div>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="sf"><label class="sl">Monthly</label><input type="month" class="si" id="exp-month" value="${monthISO}"></div>
+          <div class="sf" style="flex:0"><button class="btn btn-o btn-sm" onclick="exportSalesExcel('monthly')" style="white-space:nowrap">⬇️ Monthly Excel</button></div>
+        </div>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="sf"><label class="sl">Annual</label><input type="number" class="si" id="exp-year" value="${now.getFullYear()}" min="2000" max="2100"></div>
+          <div class="sf" style="flex:0"><button class="btn btn-o btn-sm" onclick="exportSalesExcel('annual')" style="white-space:nowrap">⬇️ Annual Excel</button></div>
+        </div>
+      </div>`;
+  } else if(type==='cost'){
+    // Per-product cost price vs selling price vs profit analysis
+    const live=txns.filter(t=>!t.refunded);
+    // Build sold qty and revenue per product
+    const soldMap={};
+    live.forEach(t=>{(t.items||[]).forEach(i=>{if(!soldMap[i.id])soldMap[i.id]={name:i.name,qty:0,revenue:0};soldMap[i.id].qty+=i.qty;soldMap[i.id].revenue+=i.price*i.qty;});});
+    const rows=prods.map(p=>{
+      const sold=soldMap[p.id]||{qty:0,revenue:0};
+      const costTotal=sold.qty*(p.cost||0);
+      const gp=sold.revenue-costTotal;
+      const margin=sold.revenue>0?((gp/sold.revenue)*100).toFixed(1):null;
+      const stockUnits=totalStock(p.id);
+      const stockValue=stockUnits*(p.cost||0);
+      return{p,sold,costTotal,gp,margin,stockUnits,stockValue};
+    }).sort((a,b)=>b.gp-a.gp);
+    const totRev=rows.reduce((s,r)=>s+r.sold.revenue,0);
+    const totCost=rows.reduce((s,r)=>s+r.costTotal,0);
+    const totGP=totRev-totCost;
+    const totMargin=totRev>0?((totGP/totRev)*100).toFixed(1):0;
+    const missingCost=prods.filter(p=>!p.cost||p.cost===0);
+    el.innerHTML=`
+      <div class="dash-g">
+        <div class="dc"><div class="dc-l">Total Revenue (all time)</div><div class="dc-v">${fmt(totRev)}</div></div>
+        <div class="dc"><div class="dc-l">Total Cost of Goods</div><div class="dc-v" style="color:var(--text2)">${fmt(totCost)}</div></div>
+        <div class="dc"><div class="dc-l">Gross Profit</div><div class="dc-v" style="color:var(--green)">${fmt(totGP)}</div></div>
+        <div class="dc"><div class="dc-l">Overall Margin</div><div class="dc-v" style="color:var(--blue)">${totMargin}%</div></div>
+      </div>
+      ${missingCost.length?`<div style="background:rgba(255,165,0,0.1);border:1px solid rgba(255,165,0,0.3);border-radius:9px;padding:9px 13px;margin-bottom:12px;font-size:0.74rem;color:var(--accent2)">⚠️ <strong>${missingCost.length} product(s)</strong> have no cost price set — their profit figures will be wrong. Edit each product to add a cost price.</div>`:''}
+      <div class="card">
+        <div class="card-t">Per-Product Cost Price, Selling Price &amp; Gross Profit</div>
+        <table class="data-t">
+          <thead><tr><th>Product</th><th>Cost Price</th><th>Sell Price</th><th>Markup</th><th>Units Sold</th><th>Revenue</th><th>Cost of Goods</th><th>Gross Profit</th><th>Margin</th><th>Stock Value</th></tr></thead>
+          <tbody>${rows.map(({p,sold,costTotal,gp,margin,stockUnits,stockValue})=>{
+            const markup=p.cost&&p.cost>0?((p.price-p.cost)/p.cost*100).toFixed(0):null;
+            const noCost=!p.cost||p.cost===0;
+            return`<tr${noCost?' style="opacity:0.7"':''}>
+              <td style="font-weight:600">${esc(p.name)}${noCost?'<span class="badge badge-o" style="margin-left:4px">No Cost</span>':''}</td>
+              <td style="color:var(--text2)">${noCost?'<span style="color:var(--accent)">Not set</span>':fmt(p.cost)}</td>
+              <td style="color:var(--accent);font-weight:600">${fmt(p.price)}</td>
+              <td style="color:var(--text2)">${markup!==null?markup+'%':'—'}</td>
+              <td>${sold.qty}</td>
+              <td>${fmt(sold.revenue)}</td>
+              <td style="color:var(--text2)">${fmt(costTotal)}</td>
+              <td style="color:${gp>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(gp)}</td>
+              <td style="color:${margin===null?'var(--text2)':parseFloat(margin)>=20?'var(--green)':'var(--accent)'}">${margin!==null?margin+'%':'—'}</td>
+              <td style="color:var(--text2)">${fmt(stockValue)}</td>
+            </tr>`;}).join('')}
+          </tbody>
+          <tfoot><tr style="border-top:2px solid var(--border)">
+            <td colspan="5" style="font-weight:700;padding:8px 10px">TOTAL</td>
+            <td style="font-weight:700;padding:8px 10px;color:var(--accent)">${fmt(totRev)}</td>
+            <td style="font-weight:700;padding:8px 10px;color:var(--text2)">${fmt(totCost)}</td>
+            <td style="font-weight:700;padding:8px 10px;color:var(--green)">${fmt(totGP)}</td>
+            <td style="font-weight:700;padding:8px 10px;color:var(--blue)">${totMargin}%</td>
+            <td style="font-weight:700;padding:8px 10px;color:var(--text2)">${fmt(rows.reduce((s,r)=>s+r.stockValue,0))}</td>
+          </tr></tfoot>
+        </table>
+        <div style="text-align:right;margin-top:10px"><button class="btn btn-o btn-sm" onclick="exportCostCSV()">⬇ Export CSV</button></div>
+      </div>`;
+  } else if(type==='stock'){
+    const lowStockCount=prods.filter(p=>p.trackStock&&totalStock(p.id)<=p.reorderLevel).length;
+    el.innerHTML=`<div class="card">
+      ${lowStockCount?`<div style="background:rgba(255,69,96,0.1);border:1px solid rgba(255,69,96,0.3);border-radius:9px;padding:9px 13px;margin-bottom:12px;font-size:0.76rem;color:var(--red)">⚠️ <strong>${lowStockCount}</strong> product(s) are at or below their minimum stock level.</div>`:''}
+      <div class="card-t">Stock Levels, Cost Value &amp; Minimum Stock Alerts</div>
+      <table class="data-t"><thead><tr><th>Product</th><th>Category</th><th>Cost</th><th>Sell</th>${DB.get('locations').map(l=>`<th>${esc(l.name)}</th>`).join('')}<th>Total</th><th>Min Level</th><th>Cost Value</th><th>Alert</th></tr></thead>
+      <tbody>${prods.map(p=>{const total=totalStock(p.id);const low=p.trackStock&&total<=p.reorderLevel;
+        return`<tr${low?' style="background:rgba(255,69,96,0.05)"':''}>
+          <td style="font-weight:600">${esc(p.name)}</td>
+          <td>${esc(p.category||'')}</td>
+          <td style="color:var(--text2)">${fmt(p.cost||0)}</td>
+          <td style="color:var(--accent)">${fmt(p.price)}</td>
+          ${DB.get('locations').map(l=>`<td>${(stock[l.id]||{})[p.id]||0}</td>`).join('')}
+          <td style="font-weight:700;color:${low?'var(--red)':'var(--text)'}">${total}</td>
+          <td style="color:var(--text2)">${p.trackStock?(p.reorderLevel||0):'—'}</td>
+          <td>${fmt((p.cost||0)*total)}</td>
+          <td>${p.trackStock?(low?`<span class="badge badge-r">⚠️ Low</span>`:`<span class="badge badge-g">OK</span>`):'<span style="color:var(--text2);font-size:0.6rem">Not tracked</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody></table>
+      <div style="text-align:right;margin-top:10px"><button class="btn btn-o btn-sm" onclick="exportStockCSV()">⬇️ Export CSV</button></div>
+    </div>`;
+  } else if(type==='movements'){
+    const recent=mvs.slice(-50).reverse();
+    el.innerHTML=`<div class="card"><div class="card-t">Stock Movements (Latest 50)</div>
+      <table class="data-t"><thead><tr><th>Type</th><th>Product</th><th>Qty</th><th>Location</th><th>Staff</th><th>Time</th></tr></thead>
+      <tbody>${recent.map(m=>`<tr>
+        <td><span class="badge ${m.type==='sale'?'badge-o':m.type==='intake'?'badge-g':m.type==='transfer'?'badge-b':'badge-r'}">${m.type}</span></td>
+        <td>${esc(m.prodName)}</td>
+        <td style="font-weight:600;color:${m.qty<0?'var(--red)':'var(--green)'}">${m.qty>0?'+':''}${m.qty}</td>
+        <td>${esc(m.locName||'')}</td>
+        <td style="font-size:0.65rem">${esc(m.staff||'')}</td>
+        <td style="font-size:0.63rem;color:var(--text2)">${new Date(m.time).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>`).join('')||'<tr><td colspan="6" style="color:var(--text2)">No movements recorded</td></tr>'}</tbody></table>
+    </div>`;
+  } else if(type==='reconcile'){
+    const byMethod={};txns.filter(t=>!t.refunded).forEach(t=>{byMethod[t.method]=(byMethod[t.method]||0)+t.total;});
+    el.innerHTML=`<div class="card"><div class="card-t">Payment Reconciliation</div>
+      <table class="data-t"><thead><tr><th>Method</th><th>Total</th><th>Transactions</th></tr></thead>
+      <tbody>${Object.entries(byMethod).map(([m,v])=>`<tr><td style="text-transform:capitalize;font-weight:600">${m}</td><td style="color:var(--accent);font-weight:600">${fmt(v)}</td><td>${txns.filter(t=>t.method===m&&!t.refunded).length}</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--text2)">No transactions</td></tr>'}</tbody>
+      <tfoot><tr><td style="font-weight:700;padding:9px 10px;border-top:2px solid var(--border)">Total</td><td style="font-weight:700;color:var(--green);padding:9px 10px;border-top:2px solid var(--border)">${fmt(txns.filter(t=>!t.refunded).reduce((s,t)=>s+t.total,0))}</td><td style="padding:9px 10px;border-top:2px solid var(--border)">${txns.filter(t=>!t.refunded).length}</td></tr></tfoot>
+      </table>
+    </div>`;
+  }
+}
+
+// Returns {vat,net} for a transaction. Sales made after VAT tracking was
+// added carry it directly; older transactions are backfilled on the fly
+// using the same auto-calculation cartTotals() uses.
+function txnVAT(t){
+  if(t.vat!=null)return{vat:t.vat,net:t.net!=null?t.net:t.total-t.vat};
+  const rate=t.vatRate!=null?t.vatRate:(DB.get('cfg').vatRate||0);
+  const sub=t.sub!=null?t.sub:(t.items||[]).reduce((s,c)=>s+c.price*c.qty,0);
+  const vatableSub=(t.items||[]).reduce((s,c)=>s+(prodVatable(prodById(c.id))?c.price*c.qty:0),0);
+  const disc=t.disc||0;
+  const vatShare=sub>0?disc*(vatableSub/sub):0;
+  const vatableAfterDisc=Math.max(0,vatableSub-vatShare);
+  const vat=rate>0?vatableAfterDisc-(vatableAfterDisc/(1+rate/100)):0;
+  return{vat,net:t.total-vat};
+}
+
+function exportSalesCSV(){
+  const rows=[['Date','Time','Staff','Items','Net','VAT','Total','Method','Refunded'],...DB.get('txns').map(t=>{const v=txnVAT(t);return[new Date(t.time).toLocaleDateString('en-GB'),new Date(t.time).toLocaleTimeString('en-GB'),t.staff||'',t.items?.length||0,v.net.toFixed(2),v.vat.toFixed(2),t.total.toFixed(2),t.method||'',t.refunded?'Yes':'No'];})];
+  dl(rows.map(r=>r.join(',')).join('\n'),'text/csv','cbspro-sales.csv');
+}
+function exportStockCSV(){
+  const locs=DB.get('locations');const stock=DB.get('stock');
+  const rows=[['Product','Barcode','Category',...locs.map(l=>l.name),'Total','Cost Value'],...DB.get('products').map(p=>[p.name,p.barcode||'',p.category||'',...locs.map(l=>(stock[l.id]||{})[p.id]||0),totalStock(p.id),((p.cost||0)*totalStock(p.id)).toFixed(2)])];
+  dl(rows.map(r=>r.join(',')).join('\n'),'text/csv','cbspro-stock.csv');
+}
+function exportCostCSV(){
+  const txns=DB.get('txns').filter(t=>!t.refunded);
+  const prods=DB.get('products');
+  const soldMap={};
+  txns.forEach(t=>{(t.items||[]).forEach(i=>{if(!soldMap[i.id])soldMap[i.id]={name:i.name,qty:0,revenue:0};soldMap[i.id].qty+=i.qty;soldMap[i.id].revenue+=i.price*i.qty;});});
+  const rows=[['Product','Category','Cost Price','Sell Price','Markup %','Units Sold','Revenue','Cost of Goods','Gross Profit','Margin %','Stock Units','Stock Value'],
+    ...prods.map(p=>{
+      const sold=soldMap[p.id]||{qty:0,revenue:0};
+      const costTotal=sold.qty*(p.cost||0);
+      const gp=sold.revenue-costTotal;
+      const margin=sold.revenue>0?((gp/sold.revenue)*100).toFixed(1):'';
+      const markup=p.cost&&p.cost>0?((p.price-p.cost)/p.cost*100).toFixed(0):'';
+      const su=totalStock(p.id);
+      return[p.name,p.category||'',(p.cost||0).toFixed(2),p.price.toFixed(2),markup,sold.qty,sold.revenue.toFixed(2),costTotal.toFixed(2),gp.toFixed(2),margin,su,((p.cost||0)*su).toFixed(2)];
+    })
+  ];
+  dl(rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv','cbspro-cost-profit-'+new Date().toISOString().split('T')[0]+'.csv');
+}
+
+// ═══════════════════════════════════════
+// SALES RECORD — DAILY / MONTHLY / ANNUAL EXCEL EXPORT
+// Uses SheetJS (loaded optionally from CDN, see top of file) to build a
+// real .xlsx workbook; if that CDN script couldn't load (offline / no
+// network), falls back to a CSV with the same columns so the export
+// always works.
+// ═══════════════════════════════════════
+function exportSalesExcel(period){
+  const txns=DB.get('txns').filter(t=>!t.refunded);
+  let from,to,label,periodTitle;
+  if(period==='daily'){
+    const v=document.getElementById('exp-daily-date')?.value;
+    const d=v?new Date(v+'T00:00:00'):new Date();
+    from=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    to=new Date(from);to.setDate(to.getDate()+1);
+    label='Daily_'+from.toISOString().split('T')[0];
+    periodTitle='Daily Sales — '+from.toLocaleDateString('en-GB');
+  }else if(period==='monthly'){
+    const v=document.getElementById('exp-month')?.value;
+    const [y,m]=v?v.split('-').map(Number):[new Date().getFullYear(),new Date().getMonth()+1];
+    from=new Date(y,m-1,1);to=new Date(y,m,1);
+    label='Monthly_'+y+'-'+String(m).padStart(2,'0');
+    periodTitle='Monthly Sales — '+from.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  }else{
+    const y=parseInt(document.getElementById('exp-year')?.value)||new Date().getFullYear();
+    from=new Date(y,0,1);to=new Date(y+1,0,1);
+    label='Annual_'+y;
+    periodTitle='Annual Sales — '+y;
+  }
+  const rows=txns.filter(t=>t.time>=from.getTime()&&t.time<to.getTime()).sort((a,b)=>a.time-b.time);
+  if(!rows.length){toast('No sales found for that period','ℹ️','t-b');return;}
+  const header=['Date','Time','Transaction ID','Staff','Items','Net (£)','VAT (£)','Total (£)','Payment Method'];
+  const data=[[periodTitle],[],header];
+  let sNet=0,sVat=0,sTot=0;
+  rows.forEach(t=>{
+    const v=txnVAT(t);sNet+=v.net;sVat+=v.vat;sTot+=t.total;
+    data.push([new Date(t.time).toLocaleDateString('en-GB'),new Date(t.time).toLocaleTimeString('en-GB'),t.id,t.staff||'',t.items?.length||0,+v.net.toFixed(2),+v.vat.toFixed(2),+t.total.toFixed(2),t.method||'']);
+  });
+  data.push([]);
+  data.push(['TOTAL','','','','',+sNet.toFixed(2),+sVat.toFixed(2),+sTot.toFixed(2),'']);
+  if(typeof XLSX!=='undefined'){
+    try{
+      const ws=XLSX.utils.aoa_to_sheet(data);
+      ws['!cols']=[{wch:12},{wch:10},{wch:16},{wch:14},{wch:8},{wch:12},{wch:10},{wch:12},{wch:14}];
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,'Sales');
+      XLSX.writeFile(wb,'cbspro-sales-'+label+'.xlsx');
+      toast('Excel report downloaded — '+rows.length+' sale(s)','✅','t-g');
+      return;
+    }catch(e){/* fall through to CSV */}
+  }
+  const csv=data.map(r=>r.map(v=>String(v??'').includes(',')?`"${v}"`:v).join(',')).join('\n');
+  dl(csv,'text/csv','cbspro-sales-'+label+'.csv');
+  toast('Excel library unavailable (offline?) — downloaded as CSV instead','⚠️','t-o');
+}
+
+// USERS
+function saveSettingsPin(){
+  const val=document.getElementById('new-settings-pin')?.value.trim();
+  const confirm2=document.getElementById('new-settings-pin2')?.value.trim();
+  if(!val||val.length<4||val.length>8||!/^\d+$/.test(val)){toast('PIN must be 4-8 digits','⚠️','t-o');return;}
+  if(val!==confirm2){toast('PINs do not match','❌','t-r');return;}
+  const cfg=DB.get('cfg');cfg.settingsPin=val;DB.set('cfg',cfg);
+  document.getElementById('new-settings-pin').value='';
+  document.getElementById('new-settings-pin2').value='';
+  toast('Settings PIN updated','✅','t-g');
+}
+
+function renderUsers(){
+  const el=document.getElementById('users-body');if(!el)return;
+  const staff=DB.get('staff');
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:0.78rem;color:var(--text2)">${staff.length} staff account(s)</div>
+      <button class="btn btn-a" onclick="openUserModal(null)">+ New Staff</button>
+    </div>
+    <div class="card">
+      <table class="data-t">
+        <thead><tr><th>Name</th><th>ID / PIN</th><th>Access Level</th><th>Status</th><th></th></tr></thead>
+        <tbody>${staff.map(s=>`<tr>
+          <td><span style="color:${s.color}">${s.emoji}</span> <strong>${esc(s.name)}</strong></td>
+          <td style="font-family:'JetBrains Mono';font-size:0.68rem">${esc(s.id)} · ${'•'.repeat(s.pin?.length||4)}</td>
+          <td><span style="font-size:0.72rem;font-weight:600;color:${roleColor(s.role)}">${roleBadge(s.role)}</span><div style="font-size:0.6rem;color:var(--text2);margin-top:1px">${roleLabel(s.role)}</div></td>
+          <td><span class="badge ${s.active!==false?'badge-g':'badge-r'}">${s.active!==false?'Active':'Inactive'}</span></td>
+          <td><button class="btn btn-o btn-sm" onclick="openUserModal('${s.id}')">Edit</button></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  renderSettingsPinCard();
+}
+
+function openUserModal(id){
+  const s=id?DB.get('staff').find(u=>u.id===id):null;
+  showModal(`<div class="modal-t">${s?'Edit':'New'} Staff</div>
+    <div class="sf"><label class="sl">Full Name *</label><input class="si" id="um-name" value="${esc(s?.name||'')}"></div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Role / Access</label><select class="si-s" id="um-role">
+        <option value="manager"   ${s?.role==='manager'   ?' selected':''}>👑 Full Access (Owner) — Till, Stock &amp; Reports</option>
+        <option value="till_stock"${s?.role==='till_stock'?' selected':''}>🖥️📦 Till &amp; Stock — Till + Intake / Transfer / Stocktake</option>
+        <option value="staff"     ${s?.role==='staff'     ?' selected':''}>🖥️ Till — POS &amp; Payments only</option>
+        <option value="stock"     ${s?.role==='stock'     ?' selected':''}>📦 Stock — Intake, Transfer &amp; Stocktake only</option>
+      </select></div>
+      <div class="sf"><label class="sl">PIN (4-6 digits) *</label><input class="si" id="um-pin" type="password" inputmode="numeric" maxlength="6" value="${s?.pin||''}" placeholder="····"></div>
+    </div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Colour</label><input type="color" class="si" id="um-color" value="${s?.color||'#ff6b35'}" style="padding:3px;height:38px"></div>
+      <div class="sf"><label class="sl">Emoji</label><input class="si" id="um-emoji" value="${esc(s?.emoji||'👤')}" maxlength="2"></div>
+    </div>
+    <div class="s-row"><span style="font-size:0.77rem">Active account</span><label class="tog"><input type="checkbox" id="um-active"${s?.active!==false?' checked':''}><span class="tog-sl"></span></label></div>
+    <div class="btn-row" style="margin-top:14px">
+      ${s&&s.role!=='manager'?`<button class="btn btn-r" onclick="deleteUser('${s.id}')">Delete</button>`:''}
+      <button class="btn btn-o" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-a" onclick="saveUser('${id||''}')">Save</button>
+    </div>`);
+}
+
+function saveUser(id){
+  const name=document.getElementById('um-name')?.value.trim();
+  const pin=document.getElementById('um-pin')?.value.trim();
+  if(!name||!pin||pin.length<4){toast('Name and 4-6 digit PIN required','⚠️','t-o');return;}
+  const staff=DB.get('staff');
+  const data={name,role:document.getElementById('um-role')?.value||'staff',pin,color:document.getElementById('um-color')?.value||'#ff6b35',emoji:document.getElementById('um-emoji')?.value||'👤',active:document.getElementById('um-active')?.checked!==false};
+  if(id){const idx=staff.findIndex(s=>s.id===id);if(idx>-1)staff[idx]={...staff[idx],...data};}
+  else{data.id='ST'+(DB.nid());staff.push(data);}
+  DB.set('staff',staff);closeModal();renderUsers();toast((id?'Updated':'Created')+': '+name,'✅','t-g');
+}
+function deleteUser(id){if(!confirm('Delete this user?'))return;DB.set('staff',DB.get('staff').filter(s=>s.id!==id));closeModal();renderUsers();}
+
+// Append the Settings PIN card inside renderUsers output
+function renderSettingsPinCard(){
+  const el=document.getElementById('users-body');if(!el)return;
+  const cfg=DB.get('cfg');
+  const pinSet=!!(cfg.settingsPin);
+  const existing=document.getElementById('settings-pin-card');
+  const card=document.createElement('div');
+  card.id='settings-pin-card';
+  card.className='card';
+  card.style.borderColor='var(--purple)';
+  card.style.marginTop='14px';
+  card.innerHTML=`
+    <div class="card-t" style="color:var(--purple)">🔐 Settings Station PIN</div>
+    <p style="font-size:0.72rem;color:var(--text2);margin-bottom:12px">This PIN protects the ⚙️ Settings station on the main screen. Only you (the Owner) can change it here. ${pinSet?'<span style="color:var(--green)">✅ PIN is set.</span>':'<span style="color:var(--accent)">⚠️ Using default PIN — please set a custom one now.</span>'}</p>
+    <div class="field-row">
+      <div class="sf"><label class="sl">New PIN (4-8 digits)</label><input class="si" id="new-settings-pin" type="password" inputmode="numeric" maxlength="8" placeholder="········"></div>
+      <div class="sf"><label class="sl">Confirm PIN</label><input class="si" id="new-settings-pin2" type="password" inputmode="numeric" maxlength="8" placeholder="········"></div>
+    </div>
+    <button class="btn btn-a" onclick="saveSettingsPin()">Save Settings PIN</button>`;
+  if(existing)existing.replaceWith(card);
+  else el.appendChild(card);
+}
+
+// LOCATIONS
+function renderLocs(){
+  const el=document.getElementById('locs-body');if(!el)return;
+  const locs=DB.get('locations');
+  el.innerHTML=`
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-t">All Locations</div>
+        <table class="data-t"><thead><tr><th>Name</th><th></th></tr></thead>
+        <tbody>${locs.map(l=>`<tr><td>${esc(l.name)}</td><td><button class="btn btn-o btn-sm" onclick="deleteLoc('${l.id}')">Delete</button></td></tr>`).join('')}</tbody></table>
+        <div class="btn-row" style="margin-top:10px">
+          <input class="si" id="new-loc-name" placeholder="New location name…">
+          <button class="btn btn-a" onclick="addLoc()">+ Add</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-t">Default Sale Location</div>
+        <div class="sf"><label class="sl">Default location used for till sales</label>
+          <select class="si-s" id="def-loc" onchange="saveDefLoc(this.value)">${locs.map(l=>`<option value="${l.id}"${l.id===DB.get('cfg').defaultLocation?' selected':''}>${esc(l.name)}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addLoc(){const name=document.getElementById('new-loc-name')?.value.trim();if(!name)return;const locs=DB.get('locations');locs.push({id:'L'+Date.now(),name});DB.set('locations',locs);renderLocs();toast('Location added','📍','t-g');}
+function deleteLoc(id){if(DB.get('locations').length<=1){toast('Cannot delete last location','⚠️','t-o');return;}if(!confirm('Delete this location? Stock data will be lost.'))return;const locs=DB.get('locations').filter(l=>l.id!==id);const stock=DB.get('stock');delete stock[id];DB.d.locations=locs;DB.d.stock=stock;DB.save();renderLocs();toast('Location deleted','🗑️','t-o');}
+function saveDefLoc(id){const cfg=DB.get('cfg');cfg.defaultLocation=id;DB.set('cfg',cfg);toast('Default location updated','✅','t-g');}
+
+// SETTINGS
+function renderSettings(){
+  const el=document.getElementById('settings-body');if(!el)return;
+  const cfg=DB.get('cfg');
+  el.innerHTML=`
+    <div class="set-grid">
+      <div class="set-card">
+        <div class="set-t">🏪 Store Details</div>
+        <div class="sf"><label class="sl">Store Name</label><input class="si" id="cfg-name" value="${esc(cfg.storeName||'')}"></div>
+        <div class="sf"><label class="sl">Address</label><input class="si" id="cfg-addr" value="${esc(cfg.storeAddr||'')}"></div>
+        <div class="sf"><label class="sl">Phone</label><input class="si" id="cfg-tel" value="${esc(cfg.storeTel||'')}"></div>
+        <div class="sf"><label class="sl">Receipt Footer</label><input class="si" id="cfg-footer" value="${esc(cfg.receiptFooter||'')}"></div>
+        <div class="sf"><label class="sl">VAT Rate (%)</label><input type="number" class="si" id="cfg-vat" value="${cfg.vatRate||20}" min="0" max="100"></div>
+        <div class="sf">
+          <label class="sl">Receipt Logo (appears at top of printed receipts)</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            ${cfg.storeLogo?`<img src="${cfg.storeLogo}" style="height:52px;max-width:120px;object-fit:contain;border-radius:7px;border:1px solid var(--border);background:var(--bg2)" id="logo-preview">`:'<div id="logo-preview" style="width:64px;height:52px;border-radius:7px;border:1px dashed var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.3rem">🏪</div>'}
+            <div>
+              <button class="btn btn-o btn-sm" onclick="document.getElementById('cfg-logo-file').click()">⬆️ Upload Logo</button>
+              ${cfg.storeLogo?`<button class="btn btn-r btn-sm" style="margin-left:6px" onclick="removeLogo()">Remove</button>`:''}
+              <input type="file" id="cfg-logo-file" accept="image/*" style="display:none" onchange="uploadStoreLogo(this)">
+              <div style="font-size:0.6rem;color:var(--text2);margin-top:4px">PNG/JPG, max 1MB. Shown on receipts.</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-a" onclick="saveStoreCfg()" style="margin-top:4px">Save Store Details</button>
+      </div>
+      <div class="set-card">
+        <div class="set-t">🧾 VAT by Category</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Mark whole categories as vatable or not — e.g. most fresh food is zero-rated in the UK while snacks/drinks/household goods usually aren't. New products pick up their category's setting automatically; it can still be overridden per product on the product's Edit screen.</p>
+        ${vatCategoryRowsHTML()}
+      </div>
+      <div class="set-card">
+        <div class="set-t">☁️ Supabase Cloud Sync</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Enable to sync data across all tills and devices in real time. You need a free Supabase project with a <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">cbs_state</code> table (columns: <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">id text PK, data jsonb, updated_at timestamptz</code>).</p>
+        <div class="sf"><label class="sl">Supabase Project URL</label><input class="si" id="cfg-sburl" value="${esc(cfg.supabaseUrl||'')}" placeholder="https://xxxx.supabase.co"></div>
+        <div class="sf"><label class="sl">Supabase Anon Key</label><input class="si" id="cfg-sbkey" value="${esc(cfg.supabaseKey||'')}" placeholder="eyJ…" type="password"></div>
+        <div class="sf"><label class="sl">Venue Code (unique ID for this store)</label><input class="si" id="cfg-vcode" value="${esc(cfg.venueCode||'')}" placeholder="e.g. my-market"></div>
+        <div class="s-row"><span style="font-size:0.77rem">Enable Cloud Sync</span><label class="tog"><input type="checkbox" id="cfg-cloud"${cfg.cloudMode?' checked':''}><span class="tog-sl"></span></label></div>
+        <button class="btn btn-b" onclick="saveCloudCfg()" style="margin-top:8px">Save &amp; Connect</button>
+        <div id="sb-sync" style="font-size:0.65rem;color:var(--text2);margin-top:6px"></div>
+      </div>
+      <div class="set-card">
+        <div class="set-t">💳 Card / Payment Integration</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">No card machine is wired up yet. Real card processing needs that provider's own app/SDK and a merchant account — it can't be added to a plain web page without their developer docs and credentials. Pick your intended provider so it's on record, and for now the till uses a manual "type in the approval code" flow.</p>
+        <div class="sf"><label class="sl">Provider</label><select class="si-s" id="cfg-payprov">
+          ${['manual','SumUp','Zettle','Dojo','Square','Stripe Terminal'].map(v=>`<option value="${v}"${cfg.paymentProvider===v?' selected':''}>${v==='manual'?'Manual code only (default)':v}</option>`).join('')}
+        </select></div>
+        <button class="btn btn-a" onclick="savePaymentCfg()" style="margin-top:4px">Save Provider</button>
+      </div>
+      <div class="set-card">
+        <div class="set-t">🖨️ Printer &amp; Cash Drawer</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px"><strong>Browser Print</strong> uses your normal system/USB printer via the print dialog — works everywhere. <strong>USB Serial</strong> talks directly to a receipt printer over USB (Chrome/Edge desktop only) and can also kick a drawer wired to it. Network/WiFi-only printers can't be driven straight from a web page — use them as a shared system printer with Browser Print instead.</p>
+        <div class="sf"><label class="sl">Printer Mode</label><select class="si-s" id="cfg-printmode">
+          <option value="browser"${cfg.printerMode!=='serial'?' selected':''}>Browser Print (any printer)</option>
+          <option value="serial"${cfg.printerMode==='serial'?' selected':''}>USB Serial (direct thermal printer)</option>
+        </select></div>
+        <div class="s-row"><span style="font-size:0.77rem">Enable cash drawer kick</span><label class="tog"><input type="checkbox" id="cfg-drawer"${cfg.drawerKickEnabled?' checked':''}><span class="tog-sl"></span></label></div>
+        <div class="sf"><label class="sl">Drawer kick command (hex, ESC/POS pulse)</label><input class="si" id="cfg-drawerhex" value="${esc(cfg.drawerKickHex||'1B7000191E')}"></div>
+        <button class="btn btn-a" onclick="savePrinterCfg()" style="margin-top:4px">Save Printer Settings</button>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-o" onclick="Printer.connect()">🔌 Connect USB Printer</button>
+          <button class="btn btn-o" onclick="Printer.testPrint()">🖨️ Test Print</button>
+          <button class="btn btn-o" onclick="Printer.kickDrawer()">💰 Test Drawer</button>
+        </div>
+      </div>
+      <div class="set-card">
+        <div class="set-t">🌐 Global Barcode (EAN) Lookup</div>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">When Intake or Products sees a barcode that isn't in your catalog yet, it looks it up on the free Open Food/Beauty/Products Facts databases to auto-fill the name. Needs internet; no account or key required.</p>
+        <div class="s-row"><span style="font-size:0.77rem">Enable global barcode lookup</span><label class="tog"><input type="checkbox" id="cfg-ean"${cfg.eanLookupEnabled?' checked':''}><span class="tog-sl"></span></label></div>
+        <button class="btn btn-a" onclick="saveEanCfg()" style="margin-top:8px">Save</button>
+      </div>
+    </div>
+    <div class="set-card">
+      <div class="set-t">🪟 Customer Display — Screensaver Media</div>
+      <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Images or short video clips shown on the customer-facing display when the cart's been empty for 15s. Keep clips short/low-res — with Cloud Sync on, everything here is stored inside the same JSON row as the rest of your data (images ≤3MB, video ≤8MB).</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button class="btn btn-o" onclick="document.getElementById('cd-media-file').click()">⬆️ Upload Image/Video</button>
+        <input type="file" id="cd-media-file" accept="image/*,video/*" multiple style="display:none" onchange="uploadCDMedia(this)">
+        <div class="sf" style="margin:0"><label class="sl">Slide interval (sec)</label><input type="number" class="si" id="cfg-cdint" value="${cfg.customerMediaInterval||8}" min="3" style="width:80px" onchange="saveCDInterval()"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${(cfg.customerMedia||[]).map((m,i)=>`<div style="position:relative;width:100px;height:70px;border-radius:8px;overflow:hidden;background:var(--bg2);border:1px solid var(--border)">
+          ${m.type==='video'?`<video src="${m.dataUrl}" style="width:100%;height:100%;object-fit:cover"></video>`:`<img src="${m.dataUrl}" style="width:100%;height:100%;object-fit:cover">`}
+          <button onclick="removeCDMedia(${i})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:4px;width:18px;height:18px;font-size:0.6rem;cursor:pointer">✕</button>
+        </div>`).join('')||'<div style="color:var(--text2);font-size:0.72rem">No media uploaded yet.</div>'}
+      </div>
+    </div>
+    <div class="set-card">
+      <div class="set-t">📤 Bulk Stock Import (CSV)</div>
+      <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Columns: <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">ean, description, quantity, cost price, selling price, vatable</code> (the last one is optional — yes/no; defaults to vatable). Matches existing products by EAN (or name if no EAN column); anything unmatched is created as a new product.</p>
+      <div class="field-row">
+        <div class="sf"><label class="sl">Receiving Location</label><select class="si-s" id="imp-loc">${locOptions(S.activeLoc||defaultLoc())}</select></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn btn-o" onclick="downloadStockCSVTemplate()">⬇️ Download CSV Template</button>
+        <button class="btn btn-g" onclick="document.getElementById('imp-file').click()">⬆️ Upload &amp; Import CSV</button>
+        <input type="file" id="imp-file" accept=".csv" style="display:none" onchange="importStockCSV(this)">
+      </div>
+    </div>
+    <div class="set-card" style="border-color:var(--blue)">
+      <div class="set-t" style="color:var(--blue)">💾 Backup</div>
+      <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Auto-backup runs every 6 hours. Full backup management (history, restore, factory reset, sync strategy) is in the <strong>Backup tab</strong> on the main Settings station.</p>
+      <button class="btn btn-b" onclick="exportBackup()">⬇ Download Backup Now</button>
+    </div>`;
+}
+
+function saveEanCfg(){
+  const cfg=DB.get('cfg');
+  cfg.eanLookupEnabled=document.getElementById('cfg-ean')?.checked||false;
+  DB.set('cfg',cfg);toast('Barcode lookup setting saved','✅','t-g');
+}
+
+function savePaymentCfg(){
+  const cfg=DB.get('cfg');
+  cfg.paymentProvider=document.getElementById('cfg-payprov')?.value||'manual';
+  DB.set('cfg',cfg);toast('Payment provider saved','✅','t-g');
+}
+
+function savePrinterCfg(){
+  const cfg=DB.get('cfg');
+  cfg.printerMode=document.getElementById('cfg-printmode')?.value||'browser';
+  cfg.drawerKickEnabled=document.getElementById('cfg-drawer')?.checked||false;
+  cfg.drawerKickHex=document.getElementById('cfg-drawerhex')?.value.trim()||'1B7000191E';
+  DB.set('cfg',cfg);toast('Printer &amp; drawer settings saved','✅','t-g');
+}
+
+function uploadCDMedia(inp){
+  const files=Array.from(inp.files||[]);if(!files.length)return;
+  const cfg=DB.get('cfg');cfg.customerMedia=cfg.customerMedia||[];
+  let done=0;
+  files.forEach(f=>{
+    const isVideo=f.type.startsWith('video/');
+    const maxMB=isVideo?8:3;
+    if(f.size>maxMB*1024*1024){toast(`${f.name} is too big (max ${maxMB}MB — cloud sync has to fit this in one JSON row)`,'⚠️','t-o');done++;if(done===files.length)inp.value='';return;}
+    const r=new FileReader();
+    r.onload=e=>{
+      cfg.customerMedia.push({type:isVideo?'video':'image',name:f.name,dataUrl:e.target.result});
+      DB.set('cfg',cfg);
+      done++;
+      if(done===files.length){inp.value='';renderSettings();toast('Customer display media updated','🪟','t-g');}
+    };
+    r.readAsDataURL(f);
+  });
+}
+function removeCDMedia(idx){
+  const cfg=DB.get('cfg');cfg.customerMedia=(cfg.customerMedia||[]).filter((_,i)=>i!==idx);
+  DB.set('cfg',cfg);renderSettings();
+}
+function saveCDInterval(){
+  const cfg=DB.get('cfg');cfg.customerMediaInterval=parseInt(document.getElementById('cfg-cdint')?.value)||8;
+  DB.set('cfg',cfg);toast('Slide interval saved','✅','t-g');
+}
+
+function vatCategoryRowsHTML(){
+  const cats=[...new Set(DB.get('products').map(p=>p.category).filter(Boolean))].sort();
+  if(!cats.length)return'<div style="color:var(--text2);font-size:0.72rem">No categories yet — add products to see them here.</div>';
+  return cats.map(c=>`
+    <div class="s-row"><span style="font-size:0.77rem">${esc(c)}</span><label class="tog"><input type="checkbox"${catVatable(c)?' checked':''} onchange="toggleCategoryVat('${esc(c).replace(/'/g,"\\'")}',this.checked)"><span class="tog-sl"></span></label></div>`
+  ).join('');
+}
+function toggleCategoryVat(cat,val){
+  const cfg=DB.get('cfg');
+  cfg.categoryVat=cfg.categoryVat||{};
+  cfg.categoryVat[cat]=val;
+  DB.set('cfg',cfg);
+  toast(`${cat}: ${val?'now vatable':'now not vatable'}`,'✅','t-g');
+}
+function saveStoreCfg(){
+  const cfg=DB.get('cfg');
+  cfg.storeName=document.getElementById('cfg-name')?.value||cfg.storeName;
+  cfg.storeAddr=document.getElementById('cfg-addr')?.value||'';
+  cfg.storeTel=document.getElementById('cfg-tel')?.value||'';
+  cfg.receiptFooter=document.getElementById('cfg-footer')?.value||'';
+  cfg.vatRate=parseFloat(document.getElementById('cfg-vat')?.value)||20;
+  DB.set('cfg',cfg);initStationScreen();toast('Store details saved','✅','t-g');
+}
+
+function uploadStoreLogo(inp){
+  const f=inp.files[0];if(!f)return;
+  if(f.size>1024*1024){toast('Logo too big — max 1MB','⚠️','t-o');inp.value='';return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const cfg=DB.get('cfg');cfg.storeLogo=e.target.result;DB.set('cfg',cfg);
+    toast('Logo saved — will appear on receipts','✅','t-g');inp.value='';renderSettings();
+  };
+  r.readAsDataURL(f);
+}
+function removeLogo(){
+  const cfg=DB.get('cfg');cfg.storeLogo=null;DB.set('cfg',cfg);
+  toast('Logo removed','🗑️','t-o');renderSettings();
+}
+
+function saveCloudCfg(){
+  const cfg=DB.get('cfg');
+  cfg.supabaseUrl=document.getElementById('cfg-sburl')?.value.trim()||'';
+  cfg.supabaseKey=document.getElementById('cfg-sbkey')?.value.trim()||'';
+  cfg.venueCode=document.getElementById('cfg-vcode')?.value.trim()||'default';
+  cfg.cloudMode=document.getElementById('cfg-cloud')?.checked||false;
+  DB.set('cfg',cfg);DB.initCloud();
+  initStationScreen();
+  toast(cfg.cloudMode?'Cloud sync enabled — connecting…':'Cloud sync disabled','☁️',cfg.cloudMode?'t-b':'t-o');
+}
+
+// ═══════════════════════════════════════
+// BULK STOCK IMPORT (CSV)
+// Expected columns (header row, any order, case-insensitive):
+//   ean/barcode, description/name, quantity/qty, cost price/cost, selling price/price
+// ═══════════════════════════════════════
+function parseCSV(text){
+  // Minimal RFC4180-ish parser: handles quoted fields with commas/quotes.
+  const rows=[];let row=[],field='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){if(text[i+1]==='"'){field+='"';i++;}else inQ=false;}
+      else field+=c;
+    }else{
+      if(c==='"')inQ=true;
+      else if(c===','){row.push(field);field='';}
+      else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(field);field='';rows.push(row);row=[];}
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){row.push(field);rows.push(row);}
+  return rows.filter(r=>r.some(f=>f.trim()!==''));
+}
+function findCol(headers,names){
+  for(const n of names){const i=headers.findIndex(h=>h.trim().toLowerCase()===n);if(i>-1)return i;}
+  return -1;
+}
+function importStockCSV(inputEl){
+  const f=inputEl.files[0];if(!f)return;
+  const loc=document.getElementById('imp-loc')?.value||defaultLoc();
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const rows=parseCSV(String(e.target.result));
+      if(rows.length<2){toast('CSV has no data rows','⚠️','t-o');return;}
+      const headers=rows[0];
+      const cEan=findCol(headers,['ean','barcode','upc']);
+      const cName=findCol(headers,['description','name','product','product name']);
+      const cQty=findCol(headers,['quantity','qty']);
+      const cCost=findCol(headers,['cost price','cost']);
+      const cSell=findCol(headers,['selling price','sell price','price']);
+      const cVat=findCol(headers,['vatable','vat','vat applicable']);
+      if(cName<0||cSell<0){toast('CSV needs at least a description/name column and a selling price column','❌','t-r');return;}
+      const prods=DB.get('products');const stock=DB.get('stock');const mvs=DB.get('movements');
+      if(!stock[loc])stock[loc]={};
+      let created=0,updated=0,skipped=0;
+      for(let i=1;i<rows.length;i++){
+        const r2=rows[i];
+        const name=(r2[cName]||'').trim();
+        const price=parseFloat(r2[cSell]);
+        if(!name||isNaN(price)){skipped++;continue;}
+        const ean=cEan>-1?(r2[cEan]||'').trim():'';
+        const cost=cCost>-1?parseFloat(r2[cCost])||0:0;
+        const qty=cQty>-1?parseInt(r2[cQty])||0:0;
+        const vatRaw=cVat>-1?(r2[cVat]||'').trim().toLowerCase():'';
+        const vatable=cVat>-1?!['0','no','n','false','not vatable','non-vatable','exempt'].includes(vatRaw):undefined;
+        let p=ean?prods.find(x=>x.barcode===ean):null;
+        if(!p)p=prods.find(x=>x.name.toLowerCase()===name.toLowerCase());
+        if(p){
+          p.price=price;p.cost=cost||p.cost;if(ean)p.barcode=ean;if(vatable!==undefined)p.vatable=vatable;
+          updated++;
+        }else{
+          p={id:DB.nid(),name,barcode:ean,category:'General',price,cost,reorderLevel:0,trackStock:true,vatable:vatable!==undefined?vatable:true};
+          prods.push(p);created++;
+        }
+        if(qty>0){
+          stock[loc][p.id]=(stock[loc][p.id]||0)+qty;
+          mvs.push({type:'intake',prodId:p.id,prodName:p.name,qty,locId:loc,locName:locName(loc),staff:S.user?.name,time:Date.now()});
+        }
+      }
+      DB.d.products=prods;DB.d.stock=stock;DB.d.movements=mvs;DB.save();
+      toast(`Import done — ${created} created, ${updated} updated, ${skipped} skipped`,'✅','t-g');
+      inputEl.value='';
+      if(document.getElementById('settings-body'))renderSettings();
+    }catch(ex){toast('Import failed: '+ex.message,'❌','t-r');}
+  };
+  r.readAsText(f);
+}
+function downloadStockCSVTemplate(){
+  dl('ean,description,quantity,cost price,selling price,vatable\n5000169000000,Whole Milk 2L,24,0.72,1.45,no\n5010251000000,White Bread,18,0.52,1.15,no\n5010001000000,Chicken Breast 1kg,8,2.80,5.49,yes\n','text/csv','cbspro-stock-import-template.csv');
+}
+
+// ═══════════════════════════════════════
+// BACKUP SYSTEM — auto every 30 min + folder picker
+// Ring buffer (48 slots ≈ 24h) in localStorage as safety net.
+// File System Access API used to write directly to a user-chosen folder
+// (local drive, mapped network drive, OneDrive folder, Google Drive folder).
+// ═══════════════════════════════════════
+const BACKUP_KEY='cbspro_backups';
+const BACKUP_INTERVAL_MS=30*60*1000; // 30 minutes
+const BACKUP_SLOTS=48;               // keep 48 snapshots ≈ 24 hours
+let _backupDirHandle=null;           // FileSystemDirectoryHandle, re-requested each session
+
+function makeBackupBlob(){
+  return JSON.stringify({_backupMeta:{createdAt:new Date().toISOString(),version:'v5'},data:DB.d},null,2);
+}
+function makeBackupFilename(){
+  return 'cbspro-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.json';
+}
+
+// ── Folder picker ──────────────────────────────────────────────
+async function pickBackupFolder(){
+  if(!('showDirectoryPicker' in window)){
+    toast('Folder picker needs Chrome or Edge on desktop','⚠️','t-o');return;
+  }
+  try{
+    _backupDirHandle=await window.showDirectoryPicker({mode:'readwrite',id:'cbspro-backup',startIn:'documents'});
+    const cfg=DB.get('cfg');cfg.backupFolderName=_backupDirHandle.name;DB.set('cfg',cfg);
+    toast('Backup folder set: '+_backupDirHandle.name,'📁','t-g');
+    renderBackup();
+  }catch(e){if(e.name!=='AbortError')toast('Folder not selected','⚠️','t-o');}
+}
+
+async function writeToFolder(blob,filename){
+  if(!_backupDirHandle)return false;
+  try{
+    const fh=await _backupDirHandle.getFileHandle(filename,{create:true});
+    const w=await fh.createWritable();
+    await w.write(blob);await w.close();
+    return true;
+  }catch(e){
+    // If permission was revoked, try to re-request
+    try{
+      const perm=await _backupDirHandle.requestPermission({mode:'readwrite'});
+      if(perm==='granted'){
+        const fh=await _backupDirHandle.getFileHandle(filename,{create:true});
+        const w=await fh.createWritable();await w.write(blob);await w.close();
+        return true;
+      }
+    }catch(e2){}
+    return false;
+  }
+}
+
+// ── Core backup run ────────────────────────────────────────────
+async function runAutoBackup(silent=false){
+  try{
+    const blob=makeBackupBlob();
+    // 1. Always save to localStorage ring buffer
+    const ring=JSON.parse(localStorage.getItem(BACKUP_KEY)||'[]');
+    ring.unshift({ts:Date.now(),label:new Date().toLocaleString('en-GB'),size:blob.length,data:blob});
+    while(ring.length>BACKUP_SLOTS)ring.pop();
+    localStorage.setItem(BACKUP_KEY,JSON.stringify(ring));
+    localStorage.setItem('cbspro_last_autobackup',Date.now().toString());
+    // 2. Also write to chosen folder if one is set
+    let folderOk=false;
+    if(_backupDirHandle){
+      folderOk=await writeToFolder(blob,makeBackupFilename());
+    }
+    if(!silent){
+      toast('Auto-backup saved'+(folderOk?' → '+_backupDirHandle.name:''),'💾','t-g');
+    }
+    if(document.getElementById('backup-body'))renderBackup();
+  }catch(e){
+    if(!silent)toast('Auto-backup failed: '+e.message,'❌','t-r');
+  }
+}
+
+function startAutoBackup(){
+  const last=parseInt(localStorage.getItem('cbspro_last_autobackup')||'0');
+  if(Date.now()-last>BACKUP_INTERVAL_MS)runAutoBackup(true);
+  setInterval(()=>runAutoBackup(true),BACKUP_INTERVAL_MS);
+}
+
+// ── Manual download ────────────────────────────────────────────
+async function exportBackup(){
+  const blob=makeBackupBlob();
+  const filename=makeBackupFilename();
+  // Try folder first if set
+  if(_backupDirHandle){
+    const ok=await writeToFolder(blob,filename);
+    if(ok){toast('Backup saved to '+_backupDirHandle.name+'/'+filename,'💾','t-g');return;}
+  }
+  dl(blob,'application/json',filename);
+  toast('Backup downloaded','💾','t-g');
+}
+
+// ── Restore & history ──────────────────────────────────────────
+function restoreAutoBackup(idx){
+  try{
+    const ring=JSON.parse(localStorage.getItem(BACKUP_KEY)||'[]');
+    const entry=ring[idx];if(!entry){toast('Backup not found','⚠️','t-o');return;}
+    const parsed=JSON.parse(entry.data);
+    const d=parsed.data||parsed;
+    if(!d.products||!d.staff){toast('Invalid backup data','❌','t-r');return;}
+    if(!confirm(`Restore backup from ${entry.label}?\nAll unsaved changes will be lost.`))return;
+    DB.d=d;DB.save();toast('Backup restored — reloading…','✅','t-g');setTimeout(()=>location.reload(),1200);
+  }catch(e){toast('Restore failed: '+e.message,'❌','t-r');}
+}
+
+function downloadAutoBackup(idx){
+  try{
+    const ring=JSON.parse(localStorage.getItem(BACKUP_KEY)||'[]');
+    const entry=ring[idx];if(!entry)return;
+    dl(entry.data,'application/json','cbspro-autobackup-'+new Date(entry.ts).toISOString().replace(/[:.]/g,'-').slice(0,19)+'.json');
+  }catch(e){toast('Download failed','❌','t-r');}
+}
+
+function importBackup(inp){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const parsed=JSON.parse(e.target.result);
+      const d=parsed.data||parsed;
+      if(!d.products||!d.staff){toast('Invalid backup file','❌','t-r');return;}
+      DB.d=d;DB.save();toast('Backup restored — reloading…','✅','t-g');
+      setTimeout(()=>location.reload(),1200);
+    }catch(ex){toast('Failed to parse backup: '+ex.message,'❌','t-r');}
+  };
+  r.readAsText(f);
+}
+
+function factoryReset(){
+  if(prompt('Type DELETE to confirm factory reset (all data wiped, cannot be undone):')!=='DELETE')return;
+  localStorage.removeItem('cbspro');
+  localStorage.removeItem(BACKUP_KEY);
+  localStorage.removeItem('cbspro_last_autobackup');
+  location.reload();
+}
+
+// ── Render ─────────────────────────────────────────────────────
+function renderBackup(){
+  const el=document.getElementById('backup-body');if(!el)return;
+  const cfg=DB.get('cfg');
+  const ring=(()=>{try{return JSON.parse(localStorage.getItem(BACKUP_KEY)||'[]');}catch(e){return[];}})();
+  const lastTs=parseInt(localStorage.getItem('cbspro_last_autobackup')||'0');
+  const msLeft=Math.max(0,(lastTs+BACKUP_INTERVAL_MS)-Date.now());
+  const mLeft=Math.floor(msLeft/60000);
+  const sLeft=Math.floor((msLeft%60000)/1000);
+  const folderName=_backupDirHandle?.name||cfg.backupFolderName||null;
+  const hasFSA='showDirectoryPicker' in window;
+
+  el.innerHTML=`
+    <!-- FOLDER PICKER -->
+    <div class="card" style="border-color:var(--green)">
+      <div class="card-t" style="color:var(--green)">📁 Auto-Save Folder</div>
+      <p style="font-size:0.72rem;color:var(--text2);margin-bottom:12px">
+        Pick any folder on this PC — including a <strong>mapped network drive</strong>, your <strong>OneDrive folder</strong>, or your <strong>Google Drive folder</strong> — and every auto-backup will be written there automatically every 30 minutes.
+        ${!hasFSA?'<br><span style="color:var(--accent)">⚠️ Folder picker requires Chrome or Edge on a desktop PC.</span>':''}
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 14px;font-size:0.8rem">
+          ${folderName
+            ?`<span style="color:var(--green)">✅ Active folder:</span> <strong>${folderName}</strong>${_backupDirHandle?'':' <span style="color:var(--accent);font-size:0.65rem">(re-select to reconnect this session)</span>'}`
+            :'<span style="color:var(--text2)">No folder selected — backups stay in browser storage only</span>'}
+        </div>
+        ${hasFSA?`<button class="btn btn-g" onclick="pickBackupFolder()">📁 ${folderName?'Change':'Choose'} Folder</button>`:''}
+        ${folderName&&hasFSA?`<button class="btn btn-o btn-sm" onclick="clearBackupFolder()">✕ Clear</button>`:''}
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:0.68rem">
+        <div style="background:var(--bg2);border-radius:8px;padding:9px 11px;border:1px solid var(--border)">
+          <div style="font-weight:700;color:var(--blue);margin-bottom:3px">🖥️ Network Drive</div>
+          Map <code style="background:var(--bg);padding:1px 4px;border-radius:3px">\\\\MainPC\\CBSBackups</code> as a drive letter on this PC, then pick it here. All PCs on the same network can read the files.
+        </div>
+        <div style="background:var(--bg2);border-radius:8px;padding:9px 11px;border:1px solid var(--border)">
+          <div style="font-weight:700;color:var(--purple);margin-bottom:3px">☁️ OneDrive</div>
+          Install OneDrive on this PC. Pick the <strong>OneDrive</strong> folder (usually <code style="background:var(--bg);padding:1px 4px;border-radius:3px">C:\Users\You\OneDrive</code>). Files sync to the cloud automatically.
+        </div>
+        <div style="background:var(--bg2);border-radius:8px;padding:9px 11px;border:1px solid var(--border)">
+          <div style="font-weight:700;color:var(--green);margin-bottom:3px">🟢 Google Drive</div>
+          Install <strong>Drive for Desktop</strong>. Pick the Google Drive folder (e.g. <code style="background:var(--bg);padding:1px 4px;border-radius:3px">G:\My Drive</code>). Files upload in the background.
+        </div>
+      </div>
+    </div>
+
+    <!-- AUTO BACKUP STATUS -->
+    <div class="card">
+      <div class="card-t">🕐 Auto-Backup — Every 30 Minutes</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <div class="dc" style="flex:1;min-width:130px"><div class="dc-l">Last Backup</div><div style="font-weight:700;color:var(--green);font-size:0.92rem">${lastTs?new Date(lastTs).toLocaleString('en-GB'):'Never'}</div></div>
+        <div class="dc" style="flex:1;min-width:130px"><div class="dc-l">Next In</div><div style="font-weight:700;color:var(--blue);font-size:0.92rem">${lastTs?(mLeft+'m '+sLeft+'s'):'Soon'}</div></div>
+        <div class="dc" style="flex:1;min-width:100px"><div class="dc-l">Snapshots</div><div style="font-weight:700;font-size:0.92rem">${ring.length} / ${BACKUP_SLOTS}</div></div>
+        <div class="dc" style="flex:1;min-width:100px"><div class="dc-l">Folder Active</div><div style="font-weight:700;font-size:0.92rem;color:${_backupDirHandle?'var(--green)':'var(--text2)'}">${_backupDirHandle?'✅ Yes':'No'}</div></div>
+        <button class="btn btn-g" onclick="runAutoBackup(false)">▶ Run Now</button>
+      </div>
+      ${ring.length?`
+        <table class="data-t"><thead><tr><th>#</th><th>Date / Time</th><th>Size</th><th></th></tr></thead><tbody>
+          ${ring.map((b,i)=>`<tr>
+            <td style="color:var(--text2);font-size:0.68rem">${i+1}</td>
+            <td style="font-weight:${i===0?'700':'400'}">${b.label}${i===0?' <span class="badge badge-g" style="margin-left:5px">Latest</span>':''}</td>
+            <td style="font-size:0.65rem;color:var(--text2)">${(b.size/1024).toFixed(1)} KB</td>
+            <td><button class="btn btn-o btn-sm" onclick="downloadAutoBackup(${i})">⬇ File</button> <button class="btn btn-b btn-sm" onclick="restoreAutoBackup(${i})">↩ Restore</button></td>
+          </tr>`).join('')}
+        </tbody></table>`
+      :'<div style="color:var(--text2);font-size:0.74rem;padding:10px 0">No snapshots yet. Click Run Now or wait for the first 30-minute cycle.</div>'}
+    </div>
+
+    <!-- MANUAL -->
+    <div class="card">
+      <div class="card-t">📥 Manual Backup &amp; Restore</div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <button class="btn btn-a" onclick="exportBackup()">⬇ ${_backupDirHandle?'Save to Folder Now':'Download Backup Now'}</button>
+        <button class="btn btn-o" onclick="document.getElementById('import-file').click()">⬆ Restore from File</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importBackup(this)">
+      </div>
+      <p style="font-size:0.65rem;color:var(--text2);margin-top:8px">The backup JSON contains all products, stock, transactions, staff and settings.</p>
+    </div>
+
+    <!-- FACTORY RESET -->
+    <div class="card" style="border-color:var(--red)">
+      <div class="card-t" style="color:var(--red)">⚠️ Factory Reset</div>
+      <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Wipes ALL data. Download a backup first.</p>
+      <button class="btn btn-r" onclick="factoryReset()">⚠️ Factory Reset</button>
+    </div>`;
+}
+
+function clearBackupFolder(){
+  _backupDirHandle=null;
+  const cfg=DB.get('cfg');cfg.backupFolderName=null;DB.set('cfg',cfg);
+  toast('Backup folder cleared','🗑️','t-o');renderBackup();
+}
+
+// ═══════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeModal();
+  if(document.getElementById('login-screen').style.display!=='none'){
+    if(e.key>='0'&&e.key<='9')pk(e.key);
+    if(e.key==='Backspace')pk('del');
+    if(e.key==='Enter')tryLogin();
+  }
+  if(document.getElementById('settings-pin-screen')?.style.display==='flex'){
+    if(e.key>='0'&&e.key<='9')spsPk(e.key);
+    if(e.key==='Backspace')spsPk('del');
+    if(e.key==='Enter')spsPk('ok');
+  }
+  if(document.getElementById('appr-dots')&&typeof window._apprPk==='function'){
+    if(e.key>='0'&&e.key<='9')window._apprPk(e.key);
+    if(e.key==='Backspace')window._apprPk('del');
+    if(e.key==='Enter')window._apprPk('ok');
+  }
+});
+</script>
+</body>
+</html>
