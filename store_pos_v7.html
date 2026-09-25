@@ -418,7 +418,9 @@ const DB={
     return this._sb;
   },
   async initCloud(){
+    // Tear down existing channels
     if(this._channel){try{this._channel.unsubscribe();}catch(e){}this._channel=null;}
+    if(this._bcast){try{this._bcast.unsubscribe();}catch(e){}this._bcast=null;}
     if(this._pollTimer){clearInterval(this._pollTimer);this._pollTimer=null;}
     const c=this.d.cfg;
     if(!c.cloudMode){setSyncDot('off');return;}
@@ -427,67 +429,93 @@ const DB={
     const code=(c.venueCode||'default').trim()||'default';
     setSyncDot('syncing');
     try{
+      // ── 1. Initial fetch — pull latest state on connect ─────────────
       const{data,error}=await sb.from('cbs_state').select('data,updated_at').eq('id',code).maybeSingle();
       if(error)throw error;
       if(data&&data.data){
-        this._applyingRemote=true;
-        const localCfg=this.d.cfg;
-        this.d=data.data;
-        this.d.cfg=Object.assign({},localCfg,data.data.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
-        try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
-        this._cbs.forEach(fn=>{try{fn();}catch(e){}});
-        this._applyingRemote=false;
+        this._applyRemote(data.data);
+        this._lastRemoteTime=new Date(data.updated_at).getTime();
       }else{
-        await this._push();
+        await this._push(); // first till — upload local as master
       }
-      this._pollTimer=setInterval(async()=>{
-        try{
-          const{data,error}=await sb.from('cbs_state').select('data,updated_at').eq('id',code).maybeSingle();
-          if(error||!data||!data.data)return;
-          const rt=new Date(data.updated_at).getTime();
-          if(rt>this._lastRemoteTime){
-            this._lastRemoteTime=rt;
-            this._applyingRemote=true;
-            const localCfg=this.d.cfg;
-            this.d=data.data;
-            this.d.cfg=Object.assign({},localCfg,data.data.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
-            try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
-            this._cbs.forEach(fn=>{try{fn();}catch(e){}});
-            this._applyingRemote=false;
-            setSyncDot('ok');
-            const el=document.getElementById('sb-sync');if(el)el.textContent='Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-          }
-        }catch(e){setSyncDot('syncing');}
-      },2000);
-      this._channel=sb.channel('cbspro_'+code)
+
+      // ── 2. Broadcast channel — ~50ms peer-to-peer between tills ─────
+      // When a till pushes it also broadcasts; other tills receive this
+      // instantly via WebSocket without waiting for DB CDC lag.
+      this._bcast=sb.channel('cbs_bcast_'+code,{config:{broadcast:{self:false}}})
+        .on('broadcast',{event:'state'},({payload})=>{
+          if(!payload?.data)return;
+          const ts=payload.ts||0;
+          if(ts<=this._lastBcastTime)return; // deduplicate
+          this._lastBcastTime=ts;
+          this._applyRemote(payload.data);
+        })
+        .subscribe();
+
+      // ── 3. Postgres changes — fallback for missed broadcasts ─────────
+      // Also catches changes made directly in Supabase dashboard.
+      this._channel=sb.channel('cbs_pg_'+code)
         .on('postgres_changes',{event:'*',schema:'public',table:'cbs_state',filter:'id=eq.'+code},payload=>{
-          const remote=payload.new&&payload.new.data;if(!remote)return;
-          this._applyingRemote=true;
-          const localCfg=this.d.cfg;
-          this.d=remote;
-          this.d.cfg=Object.assign({},remote.cfg||{},{cloudMode:true,supabaseUrl:localCfg.supabaseUrl,supabaseKey:localCfg.supabaseKey,venueCode:code});
-          try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
-          this._cbs.forEach(fn=>{try{fn();}catch(e){}});
-          this._applyingRemote=false;
-          this._lastRemoteTime=Date.now();
-          setSyncDot('ok');
+          const remote=payload.new?.data;if(!remote)return;
+          const rt=new Date(payload.new.updated_at).getTime();
+          if(rt<=this._lastRemoteTime)return; // already applied via broadcast
+          this._lastRemoteTime=rt;
+          this._applyRemote(remote);
         })
         .subscribe(status=>{setSyncDot(status==='SUBSCRIBED'?'ok':'syncing');});
+
+      // ── 4. Heartbeat poll every 30s — reconnect safety net only ─────
+      // Not used to receive data; just checks we are still connected
+      // and re-subscribes if the WebSocket dropped silently.
+      this._pollTimer=setInterval(async()=>{
+        try{
+          const st=this._channel?.state;
+          if(st&&st!=='joined'){
+            setSyncDot('syncing');
+            await this.initCloud(); // reconnect
+          }
+        }catch(e){}
+      },30000);
+
       setSyncDot('ok');
     }catch(e){console.error('Cloud sync failed',e);setSyncDot('off');toast('Cloud sync failed: '+e.message,'❌','t-r');}
   },
-  _queuePush(){clearTimeout(this._pushTimer);this._pushTimer=setTimeout(()=>this._push(),300);},
+  _queuePush(){clearTimeout(this._pushTimer);this._pushTimer=setTimeout(()=>this._push(),800);},
   async _push(){
     const c=this.d.cfg;if(!c.cloudMode)return;
     const sb=this._client();if(!sb)return;
     const code=(c.venueCode||'default').trim()||'default';
     setSyncDot('syncing');
     try{
-      const{error}=await sb.from('cbs_state').upsert({id:code,data:this.d,updated_at:new Date().toISOString()});
+      const payload=JSON.parse(JSON.stringify(this.d));
+      const{error}=await sb.from('cbs_state').upsert({id:code,data:payload,updated_at:new Date().toISOString()});
       if(error)throw error;
+      if(this._bcast){
+        this._bcast.send({type:'broadcast',event:'state',payload:{data:payload,ts:Date.now()}}).catch(()=>{});
+      }
       setSyncDot('ok');
-      const el=document.getElementById('sb-sync');if(el)el.textContent='Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      this._lastPushed=Date.now();
+      const el=document.getElementById('sb-sync');
+      if(el)el.textContent='⚡ Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     }catch(e){console.error('Push failed',e);setSyncDot('off');}
+  },
+  _applyRemote(remote){
+    if(!remote)return;
+    const localCfg=this.d.cfg;
+    this._applyingRemote=true;
+    this.d=remote;
+    this.d.cfg=Object.assign({},localCfg,remote.cfg||{},{
+      cloudMode:true,
+      supabaseUrl:localCfg.supabaseUrl,
+      supabaseKey:localCfg.supabaseKey,
+      venueCode:localCfg.venueCode
+    });
+    try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
+    this._cbs.forEach(fn=>{try{fn();}catch(e){}});
+    this._applyingRemote=false;
+    setSyncDot('ok');
+    const el=document.getElementById('sb-sync');
+    if(el)el.textContent='⚡ Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }
 };
 
@@ -2348,7 +2376,7 @@ function renderSettings(){
       </div>
       <div class="set-card">
         <div class="set-t">☁️ Supabase Cloud Sync</div>
-        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Enable to sync data across all tills and devices in real time. You need a free Supabase project with a <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">cbs_state</code> table (columns: <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">id text PK, data jsonb, updated_at timestamptz</code>).</p>
+        <p style="font-size:0.72rem;color:var(--text2);margin-bottom:10px">Enable to sync data across all tills in real time (⚡ ~50ms). Requires a free Supabase project with the <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">cbs_state</code> table and <strong>Realtime enabled on that table</strong> (Supabase → Database → Replication → tick <em>cbs_state</em>). Columns: <code style="font-size:0.68rem;background:var(--bg2);padding:1px 5px;border-radius:4px">id text PK, data jsonb, updated_at timestamptz</code>.</p>
         <div class="sf"><label class="sl">Supabase Project URL</label><input class="si" id="cfg-sburl" value="${esc(cfg.supabaseUrl||'')}" placeholder="https://xxxx.supabase.co"></div>
         <div class="sf"><label class="sl">Supabase Anon Key</label><input class="si" id="cfg-sbkey" value="${esc(cfg.supabaseKey||'')}" placeholder="eyJ…" type="password"></div>
         <div class="sf"><label class="sl">Venue Code (unique ID for this store)</label><input class="si" id="cfg-vcode" value="${esc(cfg.venueCode||'')}" placeholder="e.g. my-market"></div>
