@@ -516,6 +516,8 @@ const DB={
     setSyncDot('ok');
     const el=document.getElementById('sb-sync');
     if(el)el.textContent='⚡ Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    // Refresh whichever view is currently visible
+    if(typeof refreshCurrentView==='function')refreshCurrentView();
   }
 };
 
@@ -667,7 +669,7 @@ function launchApp(){
   else if(S.station==='settings')buildSettingsApp();
   toast('Welcome, '+S.user.name+'!',S.user.emoji,'t-g');
 }
-function doLogout(){if(!confirm('Log out?'))return;document.getElementById('app').style.display='none';S.station=null;S.user=null;S.cart=[];document.getElementById('t-tabs').innerHTML='';document.getElementById('main').innerHTML='';document.getElementById('station-screen').style.display='flex';initStationScreen();}
+function doLogout(){if(!confirm('Log out?'))return;if(window._dashTimer){clearInterval(window._dashTimer);window._dashTimer=null;}document.getElementById('app').style.display='none';S.station=null;S.user=null;S.cart=[];S.view=null;document.getElementById('t-tabs').innerHTML='';document.getElementById('main').innerHTML='';document.getElementById('station-screen').style.display='flex';initStationScreen();}
 
 
 // ═══════════════════════════════════════
@@ -728,6 +730,67 @@ function buildSettingsApp(){
 // ═══════════════════════════════════════
 // TILL STATION
 // ═══════════════════════════════════════
+// ── Auto-refresh: called by _applyRemote whenever remote data arrives ──────
+// Detects current active view and re-renders it live, no user interaction needed.
+function refreshCurrentView(){
+  // Don't interrupt an open modal or active charge flow
+  if(document.getElementById('modal-overlay')?.style.display==='flex')return;
+
+  const v=S.view;
+  if(!v)return;
+
+  try{
+    switch(v){
+      // ── Till views ───────────────────────────────────────────────────
+      case 'v-till':
+        renderProdGrid();
+        renderCartItems();
+        renderCartTotals();
+        renderTillStockAlerts();
+        break;
+
+      // ── Stock views ──────────────────────────────────────────────────
+      case 'v-intake':
+        renderIntake();
+        break;
+      case 'v-transfer':
+        renderTransfer();
+        break;
+      case 'v-stocktake':
+        renderStocktake();
+        break;
+
+      // ── Owner / Manager views ────────────────────────────────────────
+      case 'v-dash':
+        renderDash();
+        break;
+      case 'v-products':
+        // Only refresh list, not an open edit form
+        if(typeof renderProductsTable==='function')renderProductsTable(
+          document.getElementById('prod-search')?.value||''
+        );
+        break;
+      case 'v-reports':
+        // Re-render the currently selected report sub-tab if visible
+        if(typeof renderReports==='function')renderReports();
+        break;
+      case 'v-users':
+        renderUsers();
+        break;
+
+      // ── Settings ─────────────────────────────────────────────────────
+      case 'v-settings':
+        // Don't re-render settings — disruptive if staff are mid-edit
+        break;
+
+      default:
+        break;
+    }
+  }catch(e){
+    // Swallow silently — view may not be mounted yet
+  }
+}
+
 function buildTill(){
   const m=document.getElementById('main');const tb=document.getElementById('t-tabs');
   m.innerHTML=`<div class="view on" id="v-till" style="display:flex;flex-direction:column;">
@@ -1813,6 +1876,9 @@ function buildManager(){
     <div class="view" id="v-reports"  style="display:none;flex-direction:column;"><div class="vscroll" id="reports-body"></div></div>
     <div class="view" id="v-users"    style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>`;
   switchV('v-dash',tb.querySelector('.tab'));renderDash();
+  // Dashboard live-refresh every 30s (catches any missed broadcast)
+  if(window._dashTimer)clearInterval(window._dashTimer);
+  window._dashTimer=setInterval(()=>{if(S.view==='v-dash')renderDash();},30000);
 }
 
 // DASHBOARD
