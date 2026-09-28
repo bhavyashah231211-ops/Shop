@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>CBSystem PRO — Supermarket POS</title>
 <meta name="theme-color" content="#0a0a0f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -229,6 +229,164 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
    overlay — it opens in its own popup window (see openCD() in the
    CUSTOMER DISPLAY script section) so it can be dragged onto a second
    monitor facing the customer. Its styles are defined inline there. */
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE RESPONSIVE  — iOS & Android  (≤ 768px)
+   ═══════════════════════════════════════════════════════ */
+
+/* Safe-area insets for iPhone notch / Dynamic Island / home bar */
+:root{
+  --safe-top:   env(safe-area-inset-top,    0px);
+  --safe-bottom:env(safe-area-inset-bottom, 0px);
+  --safe-left:  env(safe-area-inset-left,   0px);
+  --safe-right: env(safe-area-inset-right,  0px);
+}
+
+@media (max-width:768px){
+
+  /* ── Shell ───────────────────────────────────────────── */
+  html,body{overflow:hidden;position:fixed;width:100%;height:100%;}
+  #app{height:100dvh;padding-bottom:var(--safe-bottom);}
+  #toasts{top:calc(var(--safe-top) + 62px);right:10px;}
+
+  /* ── Topbar ──────────────────────────────────────────── */
+  .topbar{
+    padding:0 10px;
+    padding-top:var(--safe-top);
+    height:calc(48px + var(--safe-top));
+  }
+  .t-logo{font-size:1.1rem;}
+  .t-badge{display:none;}            /* hide station badge on mobile */
+  .t-clock{display:none;}            /* hide clock — no room        */
+  .t-tabs{gap:2px;}
+  .tab{padding:4px 9px;font-size:0.68rem;}
+
+  /* ── Status bar ──────────────────────────────────────── */
+  .sbar{padding:2px 10px;padding-bottom:0;}
+
+  /* ── Station screen ──────────────────────────────────── */
+  #station-screen{padding:var(--safe-top) 0 var(--safe-bottom);gap:12px;}
+  .ss-logo{font-size:2.8rem;}
+  .stations-grid{
+    grid-template-columns:repeat(3,1fr) !important;
+    max-width:100% !important;
+    width:94%;
+    gap:9px;
+  }
+  .st-card{padding:18px 10px;border-radius:15px;}
+  .st-icon{font-size:1.9rem;margin-bottom:6px;}
+  .st-name{font-size:1.1rem;}
+  .st-desc{font-size:0.55rem;}
+
+  /* ── Login / PIN screen ──────────────────────────────── */
+  #login-screen{padding:var(--safe-top) 0 var(--safe-bottom);gap:7px;}
+  .ls-back{top:calc(var(--safe-top) + 10px);left:12px;}
+  .ls-venue-name{font-size:2rem;}
+  .ls-badge{font-size:1.8rem;}
+  .pin-pad{grid-template-columns:repeat(3,72px);gap:7px;}
+  .pk{width:72px;height:72px;font-size:1.2rem;}
+
+  /* ── TILL — mobile layout ────────────────────────────── */
+  /* Stack vertically: product grid on top, cart drawer at bottom */
+  .pos-wrap{
+    flex-direction:column;
+    overflow:hidden;
+    position:relative;
+  }
+  .pos-menu{
+    flex:1;
+    overflow:hidden;
+    min-height:0;
+  }
+  /* Shrink product tiles on narrow screens */
+  .prod-g{
+    grid-template-columns:repeat(auto-fill,minmax(100px,1fr));
+    gap:5px;
+    padding:7px;
+  }
+  .pi{padding:9px 7px;}
+  .pi-name{font-size:0.7rem;}
+  .pi-price{font-size:0.8rem;}
+
+  /* ── Cart drawer ─────────────────────────────────────── */
+  /* Cart slides up from the bottom as a sheet */
+  .pos-cart{
+    width:100% !important;
+    border-left:none !important;
+    border-top:2px solid var(--border);
+    max-height:55vh;
+    transition:max-height 0.3s ease;
+    flex-shrink:0;
+    position:relative;
+  }
+  /* Drag handle above cart */
+  .pos-cart::before{
+    content:'';
+    display:block;
+    width:38px;height:4px;
+    background:var(--border);
+    border-radius:2px;
+    margin:7px auto 0;
+  }
+  /* Cart collapsed by default — tapping handle or charge button expands */
+  .pos-cart.collapsed{max-height:48px;overflow:hidden;}
+  .cart-hdr{
+    padding:7px 12px;
+    cursor:pointer;
+  }
+  /* Hide footer inputs in collapsed state — only show when cart expanded */
+  .pos-cart.collapsed .cart-items,
+  .pos-cart.collapsed .cart-foot{display:none;}
+
+  /* Scan bar: wrap onto two lines if needed */
+  .scan-bar{flex-wrap:wrap;gap:5px;padding:5px 8px;}
+  .scan-bar .srch{min-width:0;flex:1;}
+
+  /* ── Modals ──────────────────────────────────────────── */
+  .modal{
+    width:100% !important;
+    max-width:100% !important;
+    border-radius:20px 20px 0 0 !important;
+    position:fixed !important;
+    bottom:0 !important;
+    left:0 !important;
+    right:0 !important;
+    max-height:92dvh !important;
+    padding-bottom:calc(20px + var(--safe-bottom)) !important;
+  }
+  .modal-ov{align-items:flex-end !important;}
+  .pay-ms{grid-template-columns:1fr 1fr;}
+  .cash-g{grid-template-columns:repeat(4,1fr);}
+
+  /* ── Dashboard ───────────────────────────────────────── */
+  .dash-g{grid-template-columns:1fr 1fr;gap:8px;}
+  .dc-v{font-size:1.6rem;}
+  .grid-2{grid-template-columns:1fr;}
+
+  /* ── Settings ────────────────────────────────────────── */
+  .set-grid{grid-template-columns:1fr;}
+
+  /* ── Tables — horizontal scroll inside card ──────────── */
+  .card{padding:12px;overflow-x:auto;}
+  .data-t{min-width:480px;}
+
+  /* ── Forms ───────────────────────────────────────────── */
+  .field-row{flex-direction:column;}
+
+  /* ── Stocktake row ───────────────────────────────────── */
+  .stk-row{grid-template-columns:1fr 72px 72px;gap:5px;}
+}
+
+/* Extra narrow — very small Android phones (≤ 380px) */
+@media (max-width:380px){
+  .stations-grid{grid-template-columns:repeat(2,1fr) !important;}
+  .prod-g{grid-template-columns:repeat(2,1fr);}
+  .dash-g{grid-template-columns:1fr;}
+  .tab{padding:4px 7px;font-size:0.63rem;}
+  .pk{width:66px;height:66px;}
+  .pin-pad{grid-template-columns:repeat(3,66px);}
+}
+
 </style>
 </head>
 <body>
@@ -834,6 +992,26 @@ function buildTill(){
   S.view='v-till';
 }
 
+// ── Mobile cart drawer toggle ──────────────────────────────────────────
+function mobCartToggle(e){
+  if(window.innerWidth>768)return; // desktop — do nothing
+  const cart=document.getElementById('mob-cart');
+  if(!cart)return;
+  // Expand if tapping the header area or drag handle (top 48px)
+  const rect=cart.getBoundingClientRect();
+  const tapY=e.clientY-rect.top;
+  if(cart.classList.contains('collapsed')||tapY<52){
+    cart.classList.toggle('collapsed');
+    e.stopPropagation();
+  }
+}
+// Auto-expand cart when item added on mobile
+function mobExpandCart(){
+  if(window.innerWidth>768)return;
+  const cart=document.getElementById('mob-cart');
+  if(cart)cart.classList.remove('collapsed');
+}
+
 // ── Combined Till + Stock for till_stock role ─────────────────
 function buildTillAndStock(){
   const m=document.getElementById('main');
@@ -858,7 +1036,7 @@ function buildTillAndStock(){
           <div class="cat-bar" id="till-cats"></div>
           <div class="prod-g" id="till-grid"><div style="padding:24px;color:var(--text2)">Loading…</div></div>
         </div>
-        <div class="pos-cart">
+        <div class="pos-cart collapsed" id="mob-cart" onclick="mobCartToggle(event)">
           <div class="cart-hdr">
             <div class="cart-title">🛒 Sale</div>
             <button class="btn btn-r btn-sm" onclick="voidCart()" title="Void requires Owner approval">🗑️ Void</button>
@@ -1039,7 +1217,7 @@ function addToCart(prodId,fromScan=false){
       const ex=S.cart.find(c=>c.id===prodId);
       if(ex)ex.qty++;
       else S.cart.push({id:prodId,name:p.name,price:p.price,qty:1,ageVerified:true});
-      renderCartItems();renderCartTotals();renderCDCart();
+      renderCartItems();renderCartTotals();mobExpandCart();renderCDCart();
       if(fromScan)toast(p.name+' added ✅','🔞','t-g');
     });
     return;
