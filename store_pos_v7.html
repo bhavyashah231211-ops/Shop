@@ -198,7 +198,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .modal-ov.on{display:flex;}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:17px;padding:20px;max-width:430px;width:92%;max-height:88vh;overflow-y:auto;}
 .modal-t{font-family:'Bebas Neue';font-size:1.45rem;margin-bottom:13px;}
-.pay-ms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px;}
+.pay-ms{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:13px;}
 .pay-opt{background:var(--bg2);border:2px solid var(--border);border-radius:11px;padding:13px;cursor:pointer;text-align:center;transition:0.18s;}
 .pay-opt.on{border-color:var(--accent);background:rgba(255,107,53,0.1);}
 .pay-ic{font-size:1.6rem;margin-bottom:4px;}
@@ -355,7 +355,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     padding-bottom:calc(20px + var(--safe-bottom)) !important;
   }
   .modal-ov{align-items:flex-end !important;}
-  .pay-ms{grid-template-columns:1fr 1fr;}
+  .pay-ms{grid-template-columns:repeat(3,1fr);}
   .cash-g{grid-template-columns:repeat(4,1fr);}
 
   /* ── Dashboard ───────────────────────────────────────── */
@@ -387,6 +387,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   .pin-pad{grid-template-columns:repeat(3,66px);}
 }
 
+
+/* ── CBSystem brand mark (every screen, bottom-right) ── */
+#cbs-brand{position:fixed;right:12px;bottom:calc(2px + env(safe-area-inset-bottom,0px));z-index:7990;pointer-events:none;user-select:none;font-family:'Bebas Neue',sans-serif;font-size:0.8rem;letter-spacing:2px;line-height:1;color:var(--accent);opacity:1;display:flex;align-items:center;gap:5px;}
+#cbs-brand::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);}
+#app .sbar{padding-right:120px;}
+/* ── Product offers ── */
+.pi-offer{display:inline-block;margin-top:3px;font-size:0.56rem;font-weight:700;color:#fff;background:var(--purple);border-radius:4px;padding:1px 6px;letter-spacing:0.3px;}
+.ci-offer{font-size:0.6rem;font-weight:600;color:var(--purple);margin-top:1px;}
 </style>
 </head>
 <body>
@@ -471,6 +479,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <div class="modal-ov" id="modal-ov"><div class="modal" id="modal-b"></div></div>
 <div id="toasts"></div>
+<div id="cbs-brand">CBSystem</div>
 
 <script>
 'use strict';
@@ -536,7 +545,7 @@ const DB={
   _cbs:[],
   _sb:null,_sbUrl:null,_sbKey:null,
   _channel:null,_pollTimer:null,
-  _applyingRemote:false,_pushTimer:null,_lastRemoteTime:0,
+  _applyingRemote:false,_pushTimer:null,_lastRemoteTime:0,_lastBcastTime:0,
   load(){
     try{const s=localStorage.getItem('cbspro');if(s)this.d=JSON.parse(s);}catch(e){}
     if(!this.d.staff)   this.d.staff=JSON.parse(JSON.stringify(DSTAFF));
@@ -544,9 +553,11 @@ const DB={
     if(!this.d.locations)this.d.locations=JSON.parse(JSON.stringify(DLOCS));
     if(!this.d.stock)   this.d.stock=JSON.parse(JSON.stringify(DSTOCK));
     this.d.cfg=Object.assign({},DCFG,this.d.cfg||{});
-    if(!this.d.txns)    this.d.txns=[];
-    if(!this.d.movements)this.d.movements=[];
-    if(!this.d.idc)     this.d.idc=0;
+    if(!this.d.txns)       this.d.txns=[];
+    if(!this.d.movements)  this.d.movements=[];
+    if(!this.d.promotions) this.d.promotions=[];
+    if(!this.d.customers)  this.d.customers=[];
+    if(!this.d.idc)        this.d.idc=0;
   },
   save(){
     try{localStorage.setItem('cbspro',JSON.stringify(this.d));}catch(e){}
@@ -685,9 +696,9 @@ function setSyncDot(s){document.querySelectorAll('.t-sync').forEach(d=>{d.classN
 // STATE
 // ═══════════════════════════════════════
 const S={station:null,user:null,pin:'',selStaff:null,view:null,
-  cart:[],cartDisc:0,cartPM:'card',
+  cart:[],cartDisc:0,cartDiscPct:0,cartPM:'card',
   prodFilter:'',prodCat:'All',
-  activeLoc: null,
+  activeLoc:null,cartCustomer:null,
 };
 
 // ═══════════════════════════════════════
@@ -921,6 +932,8 @@ function refreshCurrentView(){
       return;
     }
     if(isVisible('v-reports')){renderReports();return;}
+    if(isVisible('v-customers')){renderCustomers();return;}
+    if(isVisible('v-promotions')){renderPromotions();return;}
     if(isVisible('v-users')){renderUsers();return;}
     // v-settings intentionally skipped — disruptive mid-edit
   }catch(e){
@@ -956,24 +969,26 @@ function buildTill(){
         <div class="cart-items" id="cart-items"><div style="text-align:center;color:var(--text2);font-size:0.74rem;padding:28px 12px">Scan or tap a product to begin</div></div>
         <div class="cart-foot">
           <div class="tr"><span>Subtotal</span><span id="c-sub">£0.00</span></div>
+          <div class="tr" id="c-promo-row" style="display:none;color:var(--purple)"><span>🏷 Promotion</span><span id="c-promo">-£0.00</span></div>
           <div class="tr" id="c-disc-row" style="display:none;color:var(--green)"><span>Discount</span><span id="c-disc">-£0.00</span></div>
           <div class="tr" id="c-vat-row" style="color:var(--text2)"><span id="c-vat-label">Incl. VAT</span><span id="c-vat">£0.00</span></div>
           <div class="tr grand"><span>TOTAL</span><span id="c-total">£0.00</span></div>
           <div style="display:flex;gap:5px;margin:8px 0 4px">
             <div style="flex:1">
-              <label class="sl">Discount (£)</label>
-              <input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" oninput="S.cartDisc=parseFloat(this.value)||0;renderCartTotals()">
+              <label class="sl">Discount</label>
+              <div style="display:flex;gap:3px">
+                <input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" placeholder="£" style="flex:1;min-width:0" oninput="S.cartDisc=parseFloat(this.value)||0;S.cartDiscPct=0;document.getElementById('disc-pct').value='';renderCartTotals()">
+                <input type="number" class="si" id="disc-pct" min="0" max="100" step="1" value="" placeholder="%" style="flex:1;min-width:0" oninput="S.cartDiscPct=parseFloat(this.value)||0;S.cartDisc=0;document.getElementById('disc-input').value='';renderCartTotals()">
+              </div>
             </div>
-            <div style="flex:1">
-              <label class="sl">Payment</label>
-              <select class="si-s" id="pay-sel" onchange="S.cartPM=this.value">
-                <option value="card">Card</option>
-                <option value="cash">Cash</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+            <div style="flex:1"><label class="sl">Payment</label><select class="si-s" id="pay-sel" onchange="S.cartPM=this.value"><option value="card">💳 Card</option><option value="cash">💵 Cash</option><option value="split">✂️ Split</option><option value="gift">🎁 Gift Card</option><option value="credit">📋 Account</option></select></div>
           </div>
-          <button class="btn btn-g" style="width:100%;margin-top:6px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
+          <div id="cart-cust-badge" style="display:none;font-size:0.68rem;color:var(--blue);margin-bottom:4px;font-weight:600"></div>
+          <div style="display:flex;gap:5px;margin-bottom:5px">
+            <button class="btn btn-o btn-sm" style="flex:1" onclick="openLinkCustomer()">👤 Customer</button>
+            <button class="btn btn-o btn-sm" style="flex:1" onclick="openPromoSelector()">🏷 Promos</button>
+          </div>
+          <button class="btn btn-g" style="width:100%;margin-top:3px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
         </div>
       </div>
     </div>
@@ -1043,15 +1058,18 @@ function buildTillAndStock(){
           </div>
           <div class="cart-items" id="cart-items"><div style="text-align:center;color:var(--text2);font-size:0.74rem;padding:28px 12px">Scan or tap a product to begin</div></div>
           <div class="cart-foot">
+            <div id="cart-cust-badge" style="display:none;font-size:0.68rem;color:var(--blue);margin-bottom:4px;font-weight:600"></div>
             <div class="tr"><span>Subtotal</span><span id="c-sub">£0.00</span></div>
+            <div class="tr" id="c-promo-row" style="display:none;color:var(--purple)"><span>🏷 Promotion</span><span id="c-promo">-£0.00</span></div>
             <div class="tr" id="c-disc-row" style="display:none;color:var(--green)"><span>Discount</span><span id="c-disc">-£0.00</span></div>
             <div class="tr" id="c-vat-row" style="color:var(--text2)"><span id="c-vat-label">Incl. VAT</span><span id="c-vat">£0.00</span></div>
             <div class="tr grand"><span>TOTAL</span><span id="c-total">£0.00</span></div>
             <div style="display:flex;gap:5px;margin:8px 0 4px">
-              <div style="flex:1"><label class="sl">Discount (£)</label><input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" oninput="S.cartDisc=parseFloat(this.value)||0;renderCartTotals()"></div>
-              <div style="flex:1"><label class="sl">Payment</label><select class="si-s" id="pay-sel" onchange="S.cartPM=this.value"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select></div>
+              <div style="flex:1"><label class="sl">Discount</label><div style="display:flex;gap:3px"><input type="number" class="si" id="disc-input" min="0" step="0.01" value="0" placeholder="£" style="flex:1;min-width:0" oninput="S.cartDisc=parseFloat(this.value)||0;S.cartDiscPct=0;document.getElementById('disc-pct').value='';renderCartTotals()"><input type="number" class="si" id="disc-pct" min="0" max="100" step="1" value="" placeholder="%" style="flex:1;min-width:0" oninput="S.cartDiscPct=parseFloat(this.value)||0;S.cartDisc=0;document.getElementById('disc-input').value='';renderCartTotals()"></div></div>
+              <div style="flex:1"><label class="sl">Payment</label><select class="si-s" id="pay-sel" onchange="S.cartPM=this.value"><option value="card">💳 Card</option><option value="cash">💵 Cash</option><option value="split">✂️ Split</option><option value="gift">🎁 Gift Card</option><option value="credit">📋 Account</option></select></div>
             </div>
-            <button class="btn btn-g" style="width:100%;margin-top:6px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
+            <div style="display:flex;gap:5px;margin-bottom:5px"><button class="btn btn-o btn-sm" style="flex:1" onclick="openLinkCustomer()">👤 Customer</button><button class="btn btn-o btn-sm" style="flex:1" onclick="openPromoSelector()">🏷 Promos</button></div>
+            <button class="btn btn-g" style="width:100%;margin-top:3px;font-size:0.9rem;padding:11px" onclick="openCharge()">💳 Charge</button>
           </div>
         </div>
       </div>
@@ -1100,6 +1118,7 @@ function renderProdGrid(){
       ${imgHtml}
       <div class="pi-name">${esc(p.name)}</div>
       <div class="pi-price">${fmt(p.price)}</div>
+      ${activeOffer(p)?`<div class="pi-offer">🏷 ${esc(offerLabel(activeOffer(p)))}</div>`:''}
       <div class="pi-cat">${esc(p.category||'')}</div>
       ${p.trackStock?`<div class="pi-stock">${qty} in stock${low?' ⚠️':''}</div>`:''}
       ${p.barcode?`<div class="pi-bc">${esc(p.barcode)}</div>`:''}
@@ -1266,6 +1285,7 @@ function renderCartItems(){
       <div class="ci-info">
         <div class="ci-nm">${esc(c.name)}</div>
         <div class="ci-pr">${fmt(c.price*c.qty)}</div>
+        ${(()=>{const o=activeOffer(prodById(c.id));if(!o)return'';const sv=offerDiscount(o,(c.effectivePrice!==undefined?c.effectivePrice:c.price),c.qty);return`<div class="ci-offer">🏷 ${esc(offerLabel(o))}${sv>0?' · saving '+fmt(sv):''}</div>`;})()}
       </div>
       <span class="ci-rm" onclick="removeCartItem(${i})">✕</span>
     </div>`).join('');
@@ -1273,7 +1293,25 @@ function renderCartItems(){
 
 function cartQty(i,d){S.cart[i].qty+=d;if(S.cart[i].qty<=0)S.cart.splice(i,1);renderCartItems();renderCartTotals();renderCDCart();}
 function removeCartItem(i){S.cart.splice(i,1);renderCartItems();renderCartTotals();renderCDCart();}
-function clearCart(){S.cart=[];S.cartDisc=0;document.getElementById('disc-input').value='0';renderCartItems();renderCartTotals();renderCDCart();}
+function clearCart(){
+  S.cart=[];S.cartDisc=0;S.cartDiscPct=0;S.cartCustomer=null;
+  const di=document.getElementById('disc-input');if(di)di.value='0';
+  const dp=document.getElementById('disc-pct');if(dp)dp.value='';
+  renderCartItems();renderCartTotals();renderCDCart();
+  if(typeof _pendingCustomerTxId!=='undefined'&&_pendingCustomerTxId){
+    linkTxToCustomer(_pendingCustomerTxId);_pendingCustomerTxId=null;
+  }
+}
+let _pendingCustomerTxId=null;
+function linkTxToCustomer(txId){
+  if(!S.cartCustomer)return;
+  const custs=DB.get('customers');
+  const c=custs.find(c=>c.id===S.cartCustomer.id);
+  if(!c)return;
+  if(!c.txIds)c.txIds=[];
+  c.txIds.push(txId);
+  DB.set('customers',custs);
+}
 
 function voidCart(){
   if(!S.cart.length){toast('Cart is already empty','⚠️','t-o');return;}
@@ -1314,26 +1352,104 @@ function prodVatable(p){
   return p.vatable!==undefined&&p.vatable!==null?!!p.vatable:catVatable(p.category);
 }
 function cartTotals(){
-  const sub=S.cart.reduce((s,c)=>s+c.price*c.qty,0);
-  const disc=Math.min(S.cartDisc,sub);
-  const after=sub-disc;
+  const sub=S.cart.reduce((s,c)=>s+(c.effectivePrice!==undefined?c.effectivePrice*c.qty:c.price*c.qty),0);
+  const promoDisc=calcPromoDiscount(S.cart);
+  const manualDiscPct=Math.min(100,Math.max(0,S.cartDiscPct||0));
+  const manualDiscAbs=parseFloat(S.cartDisc)||0;
+  const manualDisc=manualDiscPct>0?((sub-promoDisc)*manualDiscPct/100):manualDiscAbs;
+  const disc=Math.min(promoDisc+manualDisc,sub);
+  const after=Math.max(0,sub-disc);
   const rate=DB.get('cfg').vatRate||0;
-  const vatableSub=S.cart.reduce((s,c)=>s+(prodVatable(prodById(c.id))?c.price*c.qty:0),0);
-  const vatShare=sub>0?disc*(vatableSub/sub):0;
-  const vatableAfterDisc=Math.max(0,vatableSub-vatShare);
-  const vat=rate>0?vatableAfterDisc-(vatableAfterDisc/(1+rate/100)):0;
-  return{sub,disc,total:after,vat,vatRate:rate};
+  const vatMode=DB.get('cfg').vatMode||'inclusive';
+  const vatableSub=S.cart.reduce((s,c)=>{const ep=c.effectivePrice!==undefined?c.effectivePrice:c.price;return s+(prodVatable(prodById(c.id))?ep*c.qty:0);},0);
+  let vat=0,total=after;
+  if(rate>0){
+    if(vatMode==='exclusive'){
+      const vatableAfterDisc=Math.max(0,vatableSub-Math.min(disc,vatableSub));
+      vat=vatableAfterDisc*(rate/100);total=after+vat;
+    }else{
+      const vatShare=sub>0?disc*(vatableSub/sub):0;
+      const vatableAfterDisc=Math.max(0,vatableSub-vatShare);
+      vat=vatableAfterDisc-(vatableAfterDisc/(1+rate/100));
+    }
+  }
+  return{sub,disc,promoDisc,manualDisc,total,vat,vatRate:rate,vatMode};
+}
+// ── Per-product offers (set in Manager → Products) ──
+const OFFER_TYPES={bogo:'Buy 1 Get 1 Free',twofor1:'2 for 1',threefor2:'3 for 2',secondhalf:'Buy 1, Second Half Price',multibuy:'Multibuy — N for £X',pct:'Percentage off',fixed:'Amount off each'};
+function activeOffer(p){return(p&&p.offer&&OFFER_TYPES[p.offer.type])?p.offer:null;}
+function offerLabel(o){
+  if(!o)return'';
+  if(o.type==='multibuy')return(o.qty||2)+' for '+fmt(o.value||0);
+  if(o.type==='pct')return(o.value||0)+'% off';
+  if(o.type==='fixed')return fmt(o.value||0)+' off';
+  return OFFER_TYPES[o.type]||'';
+}
+function offerDiscount(o,price,qty){
+  if(!o||qty<=0||price<=0)return 0;
+  switch(o.type){
+    case'bogo':case'twofor1':return Math.floor(qty/2)*price;
+    case'threefor2':return Math.floor(qty/3)*price;
+    case'secondhalf':return Math.floor(qty/2)*price*0.5;
+    case'multibuy':{const n=Math.max(2,o.qty||2);const gp=o.value||0;return Math.max(0,Math.floor(qty/n)*(n*price-gp));}
+    case'pct':return price*qty*Math.min(100,Math.max(0,o.value||0))/100;
+    case'fixed':return Math.min(o.value||0,price)*qty;
+  }
+  return 0;
+}
+function calcPromoDiscount(cart){
+  const now=Date.now();
+  const promos=DB.get('promotions').filter(pr=>{
+    if(!pr.enabled)return false;
+    if(pr.startDate&&new Date(pr.startDate).getTime()>now)return false;
+    if(pr.endDate&&new Date(pr.endDate).getTime()<now)return false;
+    return true;
+  });
+  let totalDisc=0;
+  // Product-level offers apply first; those lines are then skipped by store-wide promotions (no double discounting)
+  cart.forEach(c=>{
+    const o=activeOffer(prodById(c.id));
+    if(o)totalDisc+=offerDiscount(o,(c.effectivePrice!==undefined?c.effectivePrice:c.price),c.qty);
+  });
+  promos.forEach(pr=>{
+    const matches=cart.filter(c=>{
+      if(activeOffer(prodById(c.id)))return false;
+      if(pr.scope==='all')return true;
+      if(pr.scope==='category'){const p=prodById(c.id);return p&&p.category===pr.category;}
+      if(pr.scope==='product')return c.id===pr.productId;
+      return false;
+    });
+    matches.forEach(c=>{
+      const linePrice=(c.effectivePrice!==undefined?c.effectivePrice:c.price);
+      const qty=c.qty;
+      if(pr.type==='pct')totalDisc+=linePrice*qty*(pr.value/100);
+      else if(pr.type==='fixed')totalDisc+=Math.min(pr.value*qty,linePrice*qty);
+      else if(pr.type==='bogo'){const freeUnits=Math.floor(qty/2);totalDisc+=freeUnits*linePrice;}
+      else if(pr.type==='halfprice')totalDisc+=linePrice*qty*0.5;
+      else if(pr.type==='multibuy'){
+        const group=pr.groupQty||2;const groupPrice=pr.groupPrice||linePrice;
+        const groups=Math.floor(qty/group);const remainder=qty%group;
+        totalDisc+=Math.max(0,linePrice*qty-(groups*groupPrice+remainder*linePrice));
+      }
+    });
+  });
+  return totalDisc;
 }
 
 function renderCartTotals(){
   const t=cartTotals();
   const e=id=>document.getElementById(id);
   if(e('c-sub'))e('c-sub').textContent=fmt(t.sub);
-  if(e('c-disc'))e('c-disc').textContent='-'+fmt(t.disc);
-  if(e('c-disc-row'))e('c-disc-row').style.display=t.disc>0?'flex':'none';
-  if(e('c-vat-label'))e('c-vat-label').textContent=`Incl. VAT (${t.vatRate}%)`;
+  if(e('c-promo-row'))e('c-promo-row').style.display=t.promoDisc>0?'flex':'none';
+  if(e('c-promo'))e('c-promo').textContent='-'+fmt(t.promoDisc);
+  if(e('c-disc'))e('c-disc').textContent='-'+fmt(t.manualDisc);
+  if(e('c-disc-row'))e('c-disc-row').style.display=t.manualDisc>0?'flex':'none';
+  const vatLabel=t.vatMode==='exclusive'?`+ VAT (${t.vatRate}%)`:`Incl. VAT (${t.vatRate}%)`;
+  if(e('c-vat-label'))e('c-vat-label').textContent=vatLabel;
   if(e('c-vat'))e('c-vat').textContent=fmt(t.vat);
   if(e('c-total'))e('c-total').textContent=fmt(t.total);
+  const cb=e('cart-cust-badge');
+  if(cb){cb.textContent=S.cartCustomer?'👤 '+S.cartCustomer.name:'';cb.style.display=S.cartCustomer?'block':'none';}
 }
 
 function openCharge(){
@@ -1349,18 +1465,28 @@ function openCharge(){
       <label class="sl">VAT included in total (${t.vatRate}%) — auto-calculated, editable</label>
       <input type="number" class="si" id="chg-vat" min="0" step="0.01" value="${t.vat.toFixed(2)}">
     </div>
-    <div class="pay-ms">
-      <div class="pay-opt${pm==='card'?' on':''}" id="pm-card" onclick="selPM('card')"><div class="pay-ic">💳</div><div class="pay-lb">Card</div></div>
-      <div class="pay-opt${pm==='cash'?' on':''}" id="pm-cash" onclick="selPM('cash')"><div class="pay-ic">💵</div><div class="pay-lb">Cash</div></div>
+    <div class="pay-ms" style="grid-template-columns:repeat(5,1fr)">
+      <div class="pay-opt${pm==='card'?' on':''}"   id="pm-card"   onclick="selPM('card')"  ><div class="pay-ic">💳</div><div class="pay-lb">Card</div></div>
+      <div class="pay-opt${pm==='cash'?' on':''}"   id="pm-cash"   onclick="selPM('cash')"  ><div class="pay-ic">💵</div><div class="pay-lb">Cash</div></div>
+      <div class="pay-opt${pm==='split'?' on':''}"  id="pm-split"  onclick="selPM('split')" ><div class="pay-ic">✂️</div><div class="pay-lb">Split</div></div>
+      <div class="pay-opt${pm==='gift'?' on':''}"   id="pm-gift"   onclick="selPM('gift')"  ><div class="pay-ic">🎁</div><div class="pay-lb">Gift Card</div></div>
+      <div class="pay-opt${pm==='credit'?' on':''}" id="pm-credit" onclick="selPM('credit')"><div class="pay-ic">📋</div><div class="pay-lb">Account</div></div>
     </div>
-    <div id="pm-detail">${pm==='cash'?cashHTML(t.total):cardHTML(t.total)}</div>
+    <div id="pm-detail">${pmDetailHTML(pm,t.total)}</div>
     <div style="display:flex;gap:7px;margin-top:10px">
       <button class="btn btn-o" style="flex:1" onclick="closeModal()">Cancel</button>
       <button class="btn btn-g" style="flex:2" onclick="completeCharge()">✅ Confirm Payment</button>
     </div>`);
   window._chargeTotal=t.total;
-  window.selPM=m=>{pm=m;S.cartPM=m;document.querySelectorAll('.pay-opt').forEach(e=>e.classList.remove('on'));document.getElementById('pm-'+m)?.classList.add('on');document.getElementById('pm-detail').innerHTML=m==='cash'?cashHTML(t.total):cardHTML(t.total);};
+  window.selPM=m=>{pm=m;S.cartPM=m;document.querySelectorAll('.pay-opt').forEach(e=>e.classList.remove('on'));document.getElementById('pm-'+m)?.classList.add('on');document.getElementById('pm-detail').innerHTML=pmDetailHTML(m,t.total);};
   window.csh=v=>{const td=t.total;const ch=v-td;document.getElementById('ctnd').textContent=fmt(v);document.getElementById('cchng').textContent=fmt(Math.max(0,ch));};
+}
+function pmDetailHTML(pm,tot){
+  if(pm==='cash')  return cashHTML(tot);
+  if(pm==='split') return splitHTML(tot);
+  if(pm==='gift')  return giftHTML(tot);
+  if(pm==='credit')return creditHTML(tot);
+  return cardHTML(tot);
 }
 function cardHTML(tot){return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center"><div style="font-size:1.3rem;margin-bottom:6px">💳</div><div style="font-family:'Bebas Neue';font-size:2rem">${fmt(tot)}</div><div style="font-size:0.72rem;color:var(--text2)">Tap, insert or swipe card</div></div>`;}
 function cashHTML(tot){return`<div style="display:flex;flex-direction:column;gap:7px">
@@ -1369,6 +1495,79 @@ function cashHTML(tot){return`<div style="display:flex;flex-direction:column;gap
   <div style="display:flex;justify-content:space-between;font-size:0.79rem"><span style="color:var(--text2)">Change</span><strong id="cchng" style="color:var(--green)">${fmt(0)}</strong></div>
   <div class="cash-g">${[5,10,20,50].map(v=>`<button class="ck" onclick="csh(${v})">${fmt(v)}</button>`).join('')}<button class="ck" style="grid-column:span 4;color:var(--accent)" onclick="csh(${tot.toFixed(2)})">Exact ${fmt(tot)}</button></div>
 </div>`;}
+
+// ── SPLIT PAYMENT ── card + cash combination
+function splitHTML(tot){
+  const half=(tot/2).toFixed(2);
+  return`<div style="display:flex;flex-direction:column;gap:8px">
+  <div style="font-size:0.72rem;color:var(--text2);margin-bottom:2px">Enter the cash amount the customer hands over — the rest goes on card.</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font-size:0.77rem;color:var(--text2);min-width:72px">Cash portion</span>
+    <input type="number" class="si" id="split-cash" min="0" max="${tot.toFixed(2)}" step="0.01" value="${half}" oninput="splitCalc(${tot.toFixed(2)})" style="flex:1">
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:0.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+    <span>💵 Cash</span><strong id="split-c-show">${fmt(parseFloat(half))}</strong>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:0.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+    <span>💳 Card</span><strong id="split-d-show">${fmt(tot-parseFloat(half))}</strong>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:0.79rem"><span style="color:var(--text2)">Change due</span><strong id="split-chg" style="color:var(--green)">${fmt(0)}</strong></div>
+  <div class="cash-g" style="grid-template-columns:repeat(4,1fr)">${[5,10,20,50].map(v=>`<button class="ck" onclick="document.getElementById('split-cash').value=${v};splitCalc(${tot.toFixed(2)})">${fmt(v)}</button>`).join('')}</div>
+</div>`;}
+function splitCalc(tot){
+  const cash=Math.min(parseFloat(document.getElementById('split-cash')?.value)||0,tot*2);
+  const card=Math.max(0,tot-cash);
+  const chg=Math.max(0,cash-tot);
+  const el=id=>document.getElementById(id);
+  if(el('split-c-show'))el('split-c-show').textContent=fmt(cash);
+  if(el('split-d-show'))el('split-d-show').textContent=fmt(card);
+  if(el('split-chg'))el('split-chg').textContent=fmt(chg);
+  // Store split amounts so completeCharge can log them
+  window._splitCash=cash;window._splitCard=card;
+}
+window.splitCalc=splitCalc;
+
+// ── GIFT CARD ──
+function giftHTML(tot){return`<div style="display:flex;flex-direction:column;gap:8px">
+  <div style="font-size:0.72rem;color:var(--text2);margin-bottom:2px">Enter the gift card number and the amount tendered.</div>
+  <div class="sf"><label class="sl">Gift Card Number / Reference</label>
+    <input class="si" id="gift-ref" placeholder="e.g. GC-0001234" autocomplete="off">
+  </div>
+  <div class="sf"><label class="sl">Gift Card Value Tendered</label>
+    <input type="number" class="si" id="gift-amt" min="0" step="0.01" value="${tot.toFixed(2)}" oninput="giftCalc(${tot.toFixed(2)})">
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:0.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+    <span>Balance remaining on card</span><strong id="gift-bal" style="color:var(--green)">${fmt(0)}</strong>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:0.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+    <span>Still owed (card short)</span><strong id="gift-owed" style="color:var(--red)">${fmt(0)}</strong>
+  </div>
+</div>`;}
+function giftCalc(tot){
+  const amt=parseFloat(document.getElementById('gift-amt')?.value)||0;
+  const bal=Math.max(0,amt-tot);const owed=Math.max(0,tot-amt);
+  const el=id=>document.getElementById(id);
+  if(el('gift-bal'))el('gift-bal').textContent=fmt(bal);
+  if(el('gift-owed'))el('gift-owed').textContent=fmt(owed);
+  window._giftRef=document.getElementById('gift-ref')?.value||'';
+  window._giftAmt=amt;
+}
+window.giftCalc=giftCalc;
+
+// ── ACCOUNT / CREDIT (charge to customer account — pay later) ──
+function creditHTML(tot){
+  const custs=DB.get('customers');
+  const linked=S.cartCustomer;
+  return`<div style="display:flex;flex-direction:column;gap:8px">
+  <div style="font-size:0.72rem;color:var(--text2);margin-bottom:2px">Charge ${fmt(tot)} to a customer account. Link a customer below — this will be recorded as an outstanding balance.</div>
+  ${linked?`<div style="background:rgba(74,158,255,0.1);border:1px solid var(--blue);border-radius:9px;padding:10px 12px;font-size:0.8rem;font-weight:600;color:var(--blue)">📋 ${esc(linked.name)}</div>`
+    :`<div style="background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.3);border-radius:9px;padding:9px 12px;font-size:0.76rem;color:var(--accent)">⚠️ No customer linked — tap 👤 Customer above to link one before confirming.</div>`}
+  <div class="sf"><label class="sl">Notes / PO Reference (optional)</label>
+    <input class="si" id="credit-note" placeholder="e.g. Invoice #123 / standing order">
+  </div>
+  <div style="font-size:0.68rem;color:var(--text2)">The transaction will be logged with method "Account Credit" and shown on the customer's history so you can reconcile it later.</div>
+</div>`;}
+
 
 function completeCharge(){
   const t=cartTotals();
@@ -1383,19 +1582,43 @@ function completeCharge(){
   });
   // Record transaction — VAT defaults to the auto-calculated figure but
   // reflects whatever the cashier left in the editable field at payment.
+  // Payment-method validation before recording
+  if(S.cartPM==='credit'&&!S.cartCustomer){
+    toast('Link a customer first for Account (credit) payment','⚠️','t-o');return;
+  }
   const vatInput=parseFloat(document.getElementById('chg-vat')?.value);
   const vat=isNaN(vatInput)?t.vat:Math.max(0,vatInput);
+  // Gather extra fields from new payment methods
+  const splitCash = S.cartPM==='split'?(window._splitCash||0):null;
+  const splitCard = S.cartPM==='split'?(window._splitCard||0):null;
+  const giftRef   = S.cartPM==='gift'?(window._giftRef||document.getElementById('gift-ref')?.value||''):null;
+  const giftAmt   = S.cartPM==='gift'?(window._giftAmt||t.total):null;
+  const creditNote= S.cartPM==='credit'?(document.getElementById('credit-note')?.value||''):null;
+  // Human-readable method label for receipts / reports
+  const methodLabel={card:'Card',cash:'Cash',split:'Split (Cash+Card)',gift:'Gift Card',credit:'Account Credit'}[S.cartPM]||S.cartPM;
   const txns=DB.get('txns');
-  const tx={id:'TX'+Date.now(),saleNo:genSaleNumber(),items:S.cart.map(c=>({...c})),sub:t.sub,disc:t.disc,total:t.total,vat,vatRate:t.vatRate,net:t.total-vat,method:S.cartPM,staff:S.user?.name,location:loc,time:Date.now()};
+  const tx={
+    id:'TX'+Date.now(),saleNo:genSaleNumber(),
+    items:S.cart.map(c=>({...c})),
+    sub:t.sub,disc:t.disc,promoDisc:t.promoDisc||0,manualDisc:t.manualDisc||0,
+    total:t.total,vat,vatRate:t.vatRate,vatMode:t.vatMode,net:t.total-vat,
+    method:methodLabel,methodKey:S.cartPM,
+    splitCash,splitCard,giftRef,giftAmt,creditNote,
+    staff:S.user?.name,location:loc,time:Date.now(),
+    customerId:S.cartCustomer?.id||null,customerName:S.cartCustomer?.name||null,
+    onAccount:S.cartPM==='credit'||null,
+  };
   txns.push(tx);
   // Record stock movements
   const mvs=DB.get('movements');
   S.cart.forEach(c=>{mvs.push({type:'sale',prodId:c.id,prodName:c.name,qty:-c.qty,locId:loc,locName:locName(loc),staff:S.user?.name,txnId:tx.id,time:Date.now()});});
   DB.d.stock=stock;DB.d.txns=txns;DB.d.movements=mvs;DB.save();
   closeModal();
-  toast(`Sale £${t.total.toFixed(2)} — ${S.cartPM}`,'✅','t-g');
+  _pendingCustomerTxId=tx.id;
+  window._splitCash=null;window._splitCard=null;window._giftRef=null;window._giftAmt=null;
+  toast(`Sale ${fmt(t.total)} — ${methodLabel}`,'✅','t-g');
   clearCart();renderProdGrid();renderCDCart();
-  if(S.cartPM==='cash'&&DB.get('cfg').drawerKickEnabled)Printer.kickDrawer();
+  if((S.cartPM==='cash'||S.cartPM==='split')&&DB.get('cfg').drawerKickEnabled)Printer.kickDrawer();
   openReceiptPrompt(tx);
 }
 
@@ -1463,6 +1686,99 @@ function requireManagerApproval(reason, onApproved){
     </div>`);
 }
 
+// ══════════════════════════════
+// CUSTOMER LINK AT CHECKOUT
+// ══════════════════════════════
+function openLinkCustomer(){
+  const custs=DB.get('customers');
+  const linked=S.cartCustomer;
+  showModal(`<div class="modal-t">👤 Link Customer</div>
+    ${linked?`<div style="background:rgba(74,158,255,0.1);border:1px solid var(--blue);border-radius:9px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:600;color:var(--blue)">👤 ${esc(linked.name)}</span>
+      <button class="btn btn-r btn-sm" onclick="S.cartCustomer=null;renderCartTotals();closeModal()">Remove</button>
+    </div>`:''}
+    <div class="sf" style="margin-bottom:8px">
+      <input class="si" id="cust-srch" placeholder="Search by name, phone or email…" oninput="filterCustList(this.value)" autocomplete="off">
+    </div>
+    <div id="cust-list" style="max-height:260px;overflow-y:auto">
+      ${custs.length?custs.slice(0,20).map(c=>`
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="linkCustomer('${c.id}')">
+          <div><div style="font-weight:600;font-size:0.82rem">${esc(c.name)}</div>
+          <div style="font-size:0.65rem;color:var(--text2)">${esc(c.phone||'')} ${esc(c.email||'')}</div></div>
+          <div style="font-size:0.68rem;color:var(--text2)">${fmt((c.txIds||[]).reduce((s,id)=>{const t=DB.get('txns').find(t=>t.id===id);return s+(t?t.total:0);},0))} spent</div>
+        </div>`).join(''):'<div style="color:var(--text2);padding:12px;text-align:center;font-size:0.78rem">No customers yet — add one below</div>'}
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+      <div style="font-size:0.72rem;color:var(--text2);margin-bottom:6px">Quick-add new customer:</div>
+      <div style="display:flex;gap:6px">
+        <input class="si" id="new-cust-name" placeholder="Name *" style="flex:2">
+        <input class="si" id="new-cust-phone" placeholder="Phone" style="flex:1">
+        <button class="btn btn-g btn-sm" onclick="quickAddCustomer()">Add &amp; Link</button>
+      </div>
+    </div>
+    <button class="btn btn-o" style="width:100%;margin-top:8px" onclick="closeModal()">Cancel</button>`);
+  window._allCusts=custs;
+  setTimeout(()=>document.getElementById('cust-srch')?.focus(),100);
+}
+function filterCustList(q){
+  const list=document.getElementById('cust-list');if(!list)return;
+  const custs=(window._allCusts||[]).filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase())||( c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q.toLowerCase()));
+  list.innerHTML=custs.length?custs.slice(0,20).map(c=>`
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="linkCustomer('${c.id}')">
+      <div><div style="font-weight:600;font-size:0.82rem">${esc(c.name)}</div>
+      <div style="font-size:0.65rem;color:var(--text2)">${esc(c.phone||'')} ${esc(c.email||'')}</div></div>
+    </div>`).join(''):'<div style="color:var(--text2);padding:12px;text-align:center;font-size:0.78rem">No matches</div>';
+}
+function linkCustomer(custId){
+  const c=DB.get('customers').find(c=>c.id===custId);
+  if(!c)return;
+  S.cartCustomer=c;
+  renderCartTotals();
+  closeModal();
+  toast('Linked to '+c.name,'👤','t-b');
+}
+function quickAddCustomer(){
+  const name=document.getElementById('new-cust-name')?.value.trim();
+  if(!name){toast('Name is required','⚠️','t-o');return;}
+  const phone=document.getElementById('new-cust-phone')?.value.trim();
+  const custs=DB.get('customers');
+  const c={id:'C'+Date.now(),name,phone:phone||'',email:'',address:'',notes:'',txIds:[],returns:[],createdAt:Date.now()};
+  custs.push(c);DB.set('customers',custs);
+  linkCustomer(c.id);
+}
+
+// ══════════════════════════════
+// PROMO SELECTOR AT CHECKOUT
+// ══════════════════════════════
+function openPromoSelector(){
+  const now=Date.now();
+  const active=DB.get('promotions').filter(pr=>{
+    if(!pr.enabled)return false;
+    if(pr.startDate&&new Date(pr.startDate).getTime()>now)return false;
+    if(pr.endDate&&new Date(pr.endDate).getTime()<now)return false;
+    return true;
+  });
+  const promoDisc=calcPromoDiscount(S.cart);
+  showModal(`<div class="modal-t">🏷 Active Promotions</div>
+    ${promoDisc>0?`<div style="background:rgba(167,139,250,0.12);border:1px solid var(--purple);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:0.78rem;color:var(--purple);font-weight:600">✅ ${fmt(promoDisc)} promotion discount applied to this sale</div>`:''}
+    ${active.length?active.map(pr=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:6px">
+        <div style="font-weight:600;font-size:0.82rem">${esc(pr.name)}</div>
+        <div style="font-size:0.68rem;color:var(--purple);margin-top:2px">${promoTypeLabel(pr)}</div>
+        ${pr.endDate?`<div style="font-size:0.6rem;color:var(--text2);margin-top:2px">Ends ${new Date(pr.endDate).toLocaleDateString('en-GB')}</div>`:''}
+      </div>`).join(''):'<div style="color:var(--text2);padding:16px;text-align:center;font-size:0.78rem">No active promotions</div>'}
+    <button class="btn btn-o" style="width:100%;margin-top:8px" onclick="closeModal()">Close</button>`);
+}
+function promoTypeLabel(pr){
+  const scope=pr.scope==='all'?'All products':pr.scope==='category'?'Category: '+pr.category:'Product: '+(prodById(pr.productId)?.name||pr.productId);
+  if(pr.type==='pct')return pr.value+'% off · '+scope;
+  if(pr.type==='fixed')return fmt(pr.value)+' off · '+scope;
+  if(pr.type==='bogo')return 'Buy 1 Get 1 Free · '+scope;
+  if(pr.type==='halfprice')return 'Half Price · '+scope;
+  if(pr.type==='multibuy')return pr.groupQty+' for '+fmt(pr.groupPrice)+' · '+scope;
+  return pr.type+' · '+scope;
+}
+
 function openReturn(){
   // Staff must get manager approval before seeing refund list
   if(S.user?.role!=='manager'){
@@ -1521,21 +1837,76 @@ function filterReturnList(val,approverName){
   list.innerHTML=txRowHTML||'<div style="color:var(--text2);padding:16px;text-align:center">No matching transactions</div>';
 }
 
-function doReturn(txId, approverName){
-  const tx=DB.get('txns').find(t=>t.id===txId);if(!tx)return;
-  if(!confirm(`Refund ${fmt(tx.total)} for ${tx.items?.length} item(s)?`))return;
+function doReturn(txId,approverName){
+  const txns=DB.get('txns');
+  const tx=txns.find(t=>t.id===txId);if(!tx)return;
+  const alreadyQtys={};
+  (tx.partialReturns||[]).forEach(r=>r.items.forEach(i=>{alreadyQtys[i.id]=(alreadyQtys[i.id]||0)+i.qty;}));
+  const returnable=(tx.items||[]).filter(i=>(i.qty-(alreadyQtys[i.id]||0))>0);
+  if(!returnable.length){toast('All items already returned','⚠️','t-o');return;}
+  const rows=returnable.map(i=>{const max=i.qty-(alreadyQtys[i.id]||0);
+    return`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1"><div style="font-size:0.77rem;font-weight:600">${esc(i.name)}</div>
+      <div style="font-size:0.63rem;color:var(--text2)">${fmt(i.price)} each · max ${max}</div></div>
+      <input type="number" class="si" data-prod="${i.id}" data-price="${i.price}" min="0" max="${max}" value="${max}" style="width:58px;text-align:center;padding:5px">
+    </div>`;}).join('');
+  showModal(`<div class="modal-t">↩ Return / Refund</div>
+    <div style="font-size:0.7rem;color:var(--green);margin-bottom:6px">✅ Approved by ${esc(approverName)}</div>
+    <div style="font-size:0.7rem;color:var(--text2);margin-bottom:8px">Ref: <strong>${esc(tx.saleNo||tx.id)}</strong> · Set qty to 0 to skip an item.</div>
+    <div style="max-height:220px;overflow-y:auto;margin-bottom:10px">${rows}</div>
+    <div class="sf" style="margin-bottom:10px"><label class="sl">Return Method</label>
+      <select class="si-s" id="ret-method">
+        <option value="refund">💰 Refund — original payment method</option>
+        <option value="exchange">🔄 Exchange — load items into new sale</option>
+        <option value="credit">🎫 Store credit / cash</option>
+      </select></div>
+    <div class="btn-row">
+      <button class="btn btn-o" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-r" style="flex:1" onclick="confirmReturn('${txId}','${esc(approverName)}')">Process Return</button>
+    </div>`);
+}
+function confirmReturn(txId,approverName){
+  const txns=DB.get('txns');
+  const txIdx=txns.findIndex(t=>t.id===txId);if(txIdx<0)return;
+  const tx=txns[txIdx];
+  const inputs=document.querySelectorAll('#modal-b input[data-prod]');
+  const returnItems=[];
+  inputs.forEach(inp=>{
+    const qty=parseInt(inp.value)||0;if(qty<=0)return;
+    const orig=(tx.items||[]).find(i=>i.id===inp.dataset.prod);if(!orig)return;
+    returnItems.push({id:orig.id,name:orig.name,qty,price:orig.price});
+  });
+  if(!returnItems.length){toast('Select at least one item to return','⚠️','t-o');return;}
+  const method=document.getElementById('ret-method')?.value||'refund';
+  const refundAmt=returnItems.reduce((s,i)=>s+i.price*i.qty,0);
   const stock=DB.get('stock');const loc=tx.location||defaultLoc();
-  tx.items?.forEach(c=>{
+  returnItems.forEach(c=>{
     const p=prodById(c.id);if(!p||!p.trackStock)return;
     if(!stock[loc])stock[loc]={};
     stock[loc][c.id]=(stock[loc][c.id]||0)+c.qty;
   });
-  tx.refunded=true;tx.refundTime=Date.now();tx.refundBy=S.user?.name;tx.refundApprovedBy=approverName||S.user?.name;
+  if(!tx.partialReturns)tx.partialReturns=[];
+  tx.partialReturns.push({items:returnItems,amount:refundAmt,method,time:Date.now(),staff:S.user?.name,approvedBy:approverName});
+  const totalOrigQty=(tx.items||[]).reduce((s,i)=>s+i.qty,0);
+  const totalReturnedQty=tx.partialReturns.reduce((s,r)=>s+r.items.reduce((a,i)=>a+i.qty,0),0);
+  if(totalReturnedQty>=totalOrigQty)tx.refunded=true;
+  tx.refundTime=Date.now();tx.refundBy=S.user?.name;tx.refundApprovedBy=approverName;
   const mvs=DB.get('movements');
-  tx.items?.forEach(c=>{mvs.push({type:'return',prodId:c.id,prodName:c.name,qty:c.qty,locId:loc,locName:locName(loc),staff:S.user?.name,approvedBy:approverName,time:Date.now()});});
+  returnItems.forEach(c=>{mvs.push({type:'return',prodId:c.id,prodName:c.name,qty:c.qty,locId:loc,locName:locName(loc),staff:S.user?.name,approvedBy:approverName,txnId:txId,refundMethod:method,time:Date.now()});});
+  if(tx.customerId){
+    const custs=DB.get('customers');const cust=custs.find(c=>c.id===tx.customerId);
+    if(cust){if(!cust.returns)cust.returns=[];cust.returns.push({txId,items:returnItems,amount:refundAmt,time:Date.now()});DB.d.customers=custs;}
+  }
   DB.d.stock=stock;DB.d.movements=mvs;DB.save();
   closeModal();
-  toast('Refund processed — '+fmt(tx.total),'↩','t-b');renderProdGrid();
+  if(method==='exchange'){
+    S.cart=returnItems.map(i=>({...i}));S.cartDisc=0;S.cartDiscPct=0;
+    renderCartItems();renderCartTotals();
+    toast('Exchange started — '+returnItems.length+' item(s) loaded into cart','🔄','t-b');
+  }else{
+    toast('Refund '+fmt(refundAmt)+' processed ('+method+')','↩','t-b');
+  }
+  renderProdGrid();
 }
 
 // ═══════════════════════════════════════
@@ -1596,7 +1967,9 @@ const Printer={
     tx.items.forEach(c=>{out+=row(c.name.slice(0,W-8),fmt(c.price*c.qty));if(c.qty>1)out+=`  ${c.qty} x ${fmt(c.price)}\n`;});
     out+=line('-');
     out+=row('Subtotal',fmt(tx.sub));
-    if(tx.disc)out+=row('Discount',fmt(-tx.disc));
+    if(tx.promoDisc)out+=row('Promotion','-'+fmt(tx.promoDisc));
+    if(tx.manualDisc)out+=row('Discount','-'+fmt(tx.manualDisc));
+    else if(tx.disc&&!tx.manualDisc&&!tx.promoDisc)out+=row('Discount','-'+fmt(tx.disc));
     out+=row('TOTAL',fmt(tx.total));
     if(tx.vat!=null)out+=row(`  incl. VAT (${tx.vatRate!=null?tx.vatRate:cfg.vatRate}%)`,fmt(tx.vat));
     out+=row('Paid via',tx.method);
@@ -1645,11 +2018,17 @@ const Printer={
       ${tx.items.map(c=>`<div style="display:flex;justify-content:space-between"><span>${esc(c.name)}${c.qty>1?` x${c.qty}`:''}</span><span>${fmt(c.price*c.qty)}</span></div>`).join('')}
       <hr>
       <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(tx.sub)}</span></div>
-      ${tx.disc?`<div style="display:flex;justify-content:space-between"><span>Discount</span><span>-${fmt(tx.disc)}</span></div>`:''}
+      ${tx.promoDisc?`<div style="display:flex;justify-content:space-between"><span>🏷 Promotion</span><span>-${fmt(tx.promoDisc)}</span></div>`:''}
+      ${tx.manualDisc?`<div style="display:flex;justify-content:space-between"><span>Discount</span><span>-${fmt(tx.manualDisc)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span>${fmt(tx.total)}</span></div>
       ${tx.vat!=null?`<div style="display:flex;justify-content:space-between;font-size:11px;color:#444"><span>incl. VAT (${tx.vatRate!=null?tx.vatRate:cfg.vatRate}%)</span><span>${fmt(tx.vat)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between"><span>Paid via</span><span>${esc(tx.method)}</span></div>
+      ${tx.methodKey==='split'&&tx.splitCash!=null?`<div style="display:flex;justify-content:space-between;font-size:11px;color:#444"><span>  Cash</span><span>${fmt(tx.splitCash)}</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:#444"><span>  Card</span><span>${fmt(tx.splitCard)}</span></div>`:''} 
+      ${tx.methodKey==='gift'&&tx.giftRef?`<div style="display:flex;justify-content:space-between;font-size:11px;color:#444"><span>  Gift Card Ref</span><span>${esc(tx.giftRef)}</span></div>`:''}
+      ${tx.onAccount?`<div style="text-align:center;color:#c00;font-size:11px;margin-top:4px;font-weight:700">⚠️ CHARGED TO ACCOUNT — PAYMENT PENDING</div>`:''}
+      ${tx.creditNote?`<div style="font-size:11px;color:#444;text-align:center">${esc(tx.creditNote)}</div>`:''}
       <hr>
+      ${tx.customerName?`<div style="text-align:center;font-size:11px;margin-top:4px">👤 ${esc(tx.customerName)}</div>`:''}
       <div style="text-align:center">${new Date(tx.time).toLocaleString('en-GB')}</div>
       <div style="text-align:center;margin-top:8px">${barSvg}</div>
       <div style="text-align:center;font-size:10px;color:#555;margin-top:2px">Ref: ${esc(saleRef)}</div>
@@ -1705,7 +2084,8 @@ const CD_STYLE=`
   #cd-total-row{padding:16px 40px 22px;border-top:3px solid #ff6b35;display:flex;justify-content:space-between;align-items:baseline;flex-shrink:0}
   #cd-total-label{font-size:1.4rem;color:#aaa}
   #cd-total-value{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:#ffd700}
-  #cd-close{position:fixed;bottom:14px;right:16px;background:rgba(255,255,255,0.08);border:1px solid #444;color:#888;border-radius:8px;padding:6px 14px;font-size:0.72rem;cursor:pointer;z-index:3}
+  #cbs-brand{position:fixed;bottom:16px;right:18px;z-index:3;pointer-events:none;font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:2px;color:#ff6b35;opacity:1}
+  #cd-close{position:fixed;bottom:14px;left:16px;background:rgba(255,255,255,0.08);border:1px solid #444;color:#888;border-radius:8px;padding:6px 14px;font-size:0.72rem;cursor:pointer;z-index:3}
 `;
 function openCD(){
   if(cdWindow&&!cdWindow.closed){cdWindow.focus();renderCDCart();return;}
@@ -1719,6 +2099,7 @@ function openCD(){
       <div id="cd-vat-row" style="display:none"><span id="cd-vat-label">VAT</span><span id="cd-vat-value">£0.00</span></div>
       <div id="cd-total-row"><div id="cd-total-label">Total</div><div id="cd-total-value">£0.00</div></div>
       <button id="cd-close" onclick="window.close()">✕ Close</button>
+      <div id="cbs-brand">CBSystem</div>
     </body></html>`);
   cdWindow.document.close();
   cdWindow.document.getElementById('cd-screensaver').onclick=hideCDScreensaver;
@@ -1777,7 +2158,7 @@ function renderCDCart(){
     return;
   }
   const t=cartTotals();
-  items.innerHTML=S.cart.map(c=>`<div class="cd-line"><span>${esc(c.name)}<span class="cd-qty">×${c.qty}</span></span><span>${fmt(c.price*c.qty)}</span></div>`).join('');
+  items.innerHTML=S.cart.map(c=>`<div class="cd-line"><span>${esc(c.name)}<span class="cd-qty">×${c.qty}</span>${(()=>{const o=activeOffer(prodById(c.id));return o?`<span class="cd-qty" style="color:#a78bfa">🏷 ${esc(offerLabel(o))}</span>`:'';})()}</span><span>${fmt(c.price*c.qty)}</span></div>`).join('');
   if(vatRow&&vatVal){vatRow.style.display='flex';vatVal.textContent=fmt(t.vat);}
   totEl.textContent=fmt(t.total);
 }
@@ -2025,13 +2406,17 @@ function buildManager(){
     mkTab('v-dash','📊 Dashboard','renderDash'),
     mkTab('v-products','🏷 Products','renderProducts'),
     mkTab('v-reports','📈 Reports','renderReports'),
+    mkTab('v-customers','👥 Customers','renderCustomers'),
+    mkTab('v-promotions','🏷 Promotions','renderPromotions'),
     mkTab('v-users','👤 Users','renderUsers'),
   ].join('');
   m.innerHTML=`
-    <div class="view" id="v-dash"     style="display:none;flex-direction:column;"><div class="vscroll" id="dash-body"></div></div>
-    <div class="view" id="v-products" style="display:none;flex-direction:column;"><div class="vscroll" id="products-body"></div></div>
-    <div class="view" id="v-reports"  style="display:none;flex-direction:column;"><div class="vscroll" id="reports-body"></div></div>
-    <div class="view" id="v-users"    style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>`;
+    <div class="view" id="v-dash"        style="display:none;flex-direction:column;"><div class="vscroll" id="dash-body"></div></div>
+    <div class="view" id="v-products"    style="display:none;flex-direction:column;"><div class="vscroll" id="products-body"></div></div>
+    <div class="view" id="v-reports"     style="display:none;flex-direction:column;"><div class="vscroll" id="reports-body"></div></div>
+    <div class="view" id="v-customers"   style="display:none;flex-direction:column;"><div class="vscroll" id="customers-body"></div></div>
+    <div class="view" id="v-promotions"  style="display:none;flex-direction:column;"><div class="vscroll" id="promotions-body"></div></div>
+    <div class="view" id="v-users"       style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>`;
   switchV('v-dash',tb.querySelector('.tab'));renderDash();
   // Dashboard live-refresh every 5s — always current even if broadcast missed
   if(window._dashTimer)clearInterval(window._dashTimer);
@@ -2049,46 +2434,89 @@ function buildManager(){
 function renderDash(){
   const el=document.getElementById('dash-body');if(!el)return;
   const txns=DB.get('txns');const prods=DB.get('products');const stock=DB.get('stock');
-  const today=new Date();today.setHours(0,0,0,0);
-  const todayTxns=txns.filter(t=>t.time>=today.getTime()&&!t.refunded);
-  const todaySales=todayTxns.reduce((s,t)=>s+t.total,0);
-  const todayItems=todayTxns.reduce((s,t)=>s+t.items.reduce((a,i)=>a+i.qty,0),0);
+  // Date range selector
+  const now=new Date();
+  const R=window._dashRange||'today';
+  let rangeStart=new Date();rangeStart.setHours(0,0,0,0);
+  let rangeEnd=new Date();rangeEnd.setHours(23,59,59,999);
+  let rangeLabel='Today';
+  if(R==='week'){rangeStart=new Date();rangeStart.setDate(now.getDate()-((now.getDay()||7)-1));rangeStart.setHours(0,0,0,0);rangeLabel='This Week';}
+  else if(R==='month'){rangeStart=new Date(now.getFullYear(),now.getMonth(),1);rangeLabel='This Month';}
+  else if(R==='all'){rangeStart=new Date(0);rangeLabel='All Time';}
+  else if(R==='custom'){
+    const cf=document.getElementById('dash-custom-from');const ct=document.getElementById('dash-custom-to');
+    if(cf&&ct&&cf.value&&ct.value){rangeStart=new Date(cf.value);rangeStart.setHours(0,0,0,0);rangeEnd=new Date(ct.value);rangeEnd.setHours(23,59,59,999);rangeLabel=cf.value+' → '+ct.value;}
+  }
+  const rangeTxns=txns.filter(t=>t.time>=rangeStart.getTime()&&t.time<=rangeEnd.getTime()&&!t.voided);
+  const salesTxns=rangeTxns.filter(t=>!t.refunded);
+  const todaySales=salesTxns.reduce((s,t)=>s+t.total,0);
+  const todayVAT=salesTxns.reduce((s,t)=>s+(t.vat||0),0);
+  const todayDisc=salesTxns.reduce((s,t)=>s+(t.disc||0),0);
+  const todayPromoDisc=salesTxns.reduce((s,t)=>s+(t.promoDisc||0),0);
+  const todayItems=salesTxns.reduce((s,t)=>s+(t.items||[]).reduce((a,i)=>a+i.qty,0),0);
+  const todayCost=salesTxns.flatMap(t=>t.items||[]).reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);
+  const todayGP=salesTxns.reduce((s,t)=>s+t.total,0)-todayCost;
+  const refundTxns=rangeTxns.filter(t=>t.refunded||(t.partialReturns||[]).length>0);
+  const refundAmt=refundTxns.reduce((s,t)=>{
+    if(t.refunded&&!(t.partialReturns||[]).length)return s+t.total;
+    return s+(t.partialReturns||[]).reduce((a,r)=>a+r.amount,0);
+  },0);
+  const netRevenue=Math.max(0,todaySales-refundAmt);
+  const byMethod={};salesTxns.forEach(t=>{byMethod[t.method]=(byMethod[t.method]||0)+t.total;});
   const allStock=prods.map(p=>({p,total:totalStock(p.id)}));
   const lowStock=allStock.filter(({p,total})=>p.trackStock&&total<=p.reorderLevel);
-  const stockVal=allStock.reduce((s,{p,total})=>s+p.cost*total,0);
+  const stockVal=allStock.reduce((s,{p,total})=>s+(p.cost||0)*total,0);
   const topProds=Object.entries(
-    txns.filter(t=>!t.refunded).flatMap(t=>t.items).reduce((a,i)=>{a[i.name]=(a[i.name]||0)+i.qty;return a;},{})
+    salesTxns.flatMap(t=>t.items||[]).reduce((a,i)=>{a[i.name]=(a[i.name]||0)+i.qty;return a;},{})
   ).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
-  // Today's cost and gross profit
-  const todayCost=todayTxns.flatMap(t=>t.items).reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);
-  const todayGP=todaySales-todayCost;
+  const todayTxns=salesTxns; // alias for Recent Transactions below
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 14px 4px;font-size:0.65rem;color:var(--text2);border-bottom:1px solid var(--border)">
-      <span>📊 Dashboard</span>
+      <span>📊 Dashboard · <strong>${rangeLabel}</strong></span>
       <span>⚡ Live · Updated ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
     </div>
-    ${lowStock.length?`<div style="background:rgba(255,69,96,0.1);border-bottom:1px solid rgba(255,69,96,0.25);padding:9px 14px;font-size:0.73rem;color:var(--red);cursor:pointer" onclick="switchV('v-reports',document.querySelector('#t-tabs .tab:nth-child(3)'));renderReports();setTimeout(()=>showReport('stock',document.querySelector('#reports-body .tab:nth-child(2)')),100)">⚠️ <strong>${lowStock.length} product(s)</strong> at or below minimum stock level — tap to view in Reports</div>`:''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--border);align-items:center">
+      ${['today','week','month','all','custom'].map(r=>`<button class="btn btn-o btn-sm" style="${R===r?'background:var(--accent);color:#fff;border-color:var(--accent)':''}" onclick="window._dashRange='${r}';renderDash()">${r==='today'?'Today':r==='week'?'This Week':r==='month'?'This Month':r==='all'?'All Time':'Custom'}</button>`).join('')}
+    </div>
+    ${R==='custom'?`<div style="display:flex;gap:6px;padding:6px 14px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
+      <input type="date" class="si" id="dash-custom-from" style="width:150px;padding:4px 8px" value="${now.toISOString().slice(0,10)}">
+      <span style="color:var(--text2)">→</span>
+      <input type="date" class="si" id="dash-custom-to" style="width:150px;padding:4px 8px" value="${now.toISOString().slice(0,10)}">
+      <button class="btn btn-g btn-sm" onclick="renderDash()">Apply</button>
+    </div>`:''}
+    ${lowStock.length?`<div style="background:rgba(255,69,96,0.1);border-bottom:1px solid rgba(255,69,96,0.25);padding:9px 14px;font-size:0.73rem;color:var(--red);cursor:pointer" onclick="switchV('v-reports',document.querySelector('#t-tabs .tab:nth-child(3)'));renderReports();setTimeout(()=>showReport('stock',document.querySelector('#reports-body .tab:nth-child(2)')),100)">⚠️ <strong>${lowStock.length} product(s)</strong> at or below minimum stock level</div>`:''}
     <div class="dash-g">
-      <div class="dc"><div class="dc-l">Today's Sales</div><div class="dc-v">${fmt(todaySales)}</div><div class="dc-s">${todayTxns.length} transaction(s)</div></div>
-      <div class="dc"><div class="dc-l">Today's Gross Profit</div><div class="dc-v" style="color:var(--green)">${fmt(todayGP)}</div><div class="dc-s">after cost of goods</div></div>
-      <div class="dc"><div class="dc-l">Items Sold Today</div><div class="dc-v">${todayItems}</div><div class="dc-s">across ${todayTxns.length} sale(s)</div></div>
-      <div class="dc"><div class="dc-l">Low Stock Alerts</div><div class="dc-v" style="color:${lowStock.length?'var(--red)':'var(--green)'}">${lowStock.length}</div><div class="dc-s">product(s) at or below reorder level</div></div>
-      <div class="dc"><div class="dc-l">Total Stock Value</div><div class="dc-v" style="color:var(--green)">${fmt(stockVal)}</div><div class="dc-s">at cost price</div></div>
+      <div class="dc"><div class="dc-l">Sales (${rangeLabel})</div><div class="dc-v">${fmt(todaySales)}</div><div class="dc-s">${salesTxns.length} transaction(s)</div></div>
+      <div class="dc"><div class="dc-l">Net Revenue</div><div class="dc-v" style="color:var(--green)">${fmt(netRevenue)}</div><div class="dc-s">after refunds</div></div>
+      <div class="dc"><div class="dc-l">Gross Profit</div><div class="dc-v" style="color:var(--green)">${fmt(todayGP)}</div><div class="dc-s">after cost of goods</div></div>
+      <div class="dc"><div class="dc-l">Items Sold</div><div class="dc-v">${todayItems}</div></div>
+      <div class="dc"><div class="dc-l">VAT Collected</div><div class="dc-v" style="color:var(--text2)">${fmt(todayVAT)}</div></div>
+      <div class="dc"><div class="dc-l">Discounts Given</div><div class="dc-v" style="color:var(--accent2)">${fmt(todayDisc+todayPromoDisc)}</div></div>
+      <div class="dc"><div class="dc-l">Refunds / Returns</div><div class="dc-v" style="color:var(--red)">${fmt(refundAmt)}<span style="font-size:0.65rem"> (${refundTxns.length})</span></div></div>
+      <div class="dc"><div class="dc-l">Stock Value</div><div class="dc-v" style="color:var(--blue)">${fmt(stockVal)}</div><div class="dc-s">at cost price</div></div>
+    </div>
+    <div style="display:flex;gap:7px;padding:4px 14px 8px;flex-wrap:wrap">
+      ${Object.entries(byMethod).map(([m,v])=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:6px 13px;font-size:0.74rem"><span style="text-transform:capitalize;color:var(--text2)">${m}</span> <strong>${fmt(v)}</strong></div>`).join('')||''}
     </div>
     <div class="grid-2">
       <div class="card">
         <div class="card-t">⚠️ Low Stock</div>
-        ${lowStock.length?`<table class="data-t"><thead><tr><th>Product</th><th>In Stock</th><th>Reorder At</th></tr></thead><tbody>${lowStock.map(({p,total})=>`<tr><td>${esc(p.name)}</td><td style="color:var(--red);font-weight:600">${total}</td><td>${p.reorderLevel}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">✅ All stock is healthy.</div>'}
+        ${lowStock.length?`<table class="data-t"><thead><tr><th>Product</th><th>Stock</th><th>Reorder At</th></tr></thead><tbody>${lowStock.map(({p,total})=>`<tr><td>${esc(p.name)}</td><td style="color:var(--red);font-weight:600">${total}</td><td>${p.reorderLevel}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem;padding:8px 0">✅ All stock is healthy.</div>'}
       </div>
       <div class="card">
         <div class="card-t">🏆 Top Products</div>
-        ${topProds.length?`<table class="data-t"><thead><tr><th>Product</th><th>Units Sold</th></tr></thead><tbody>${topProds.map(([name,qty])=>`<tr><td>${esc(name)}</td><td style="font-weight:600;color:var(--accent)">${qty}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem">No sales recorded yet.</div>'}
+        ${topProds.length?`<table class="data-t"><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${topProds.map(([name,qty])=>`<tr><td>${esc(name)}</td><td style="font-weight:600;color:var(--accent)">${qty}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--text2);font-size:0.74rem;padding:8px 0">No sales yet.</div>'}
       </div>
     </div>
     <div class="card">
       <div class="card-t">Recent Transactions</div>
-      ${txns.slice(-10).reverse().map(t=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.74rem"><span>${new Date(t.time).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span><span>${esc(t.staff||'')}</span><span>${t.items?.length} item(s)</span><span style="font-weight:700;color:${t.refunded?'var(--red)':'var(--accent)'}">${t.refunded?'REFUNDED':fmt(t.total)}</span></div>`).join('')||'<div style="color:var(--text2);font-size:0.74rem">No transactions yet.</div>'}
+      ${rangeTxns.slice(-15).reverse().map(t=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.74rem;gap:6px">
+        <span style="color:var(--text2)">${new Date(t.time).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+        <span>${esc(t.saleNo||t.id)}</span>
+        <span style="color:var(--text2)">${esc(t.staff||'')}</span>
+        <span style="color:var(--text2)">${(t.items||[]).length} item(s)</span>
+        <span style="font-weight:700;color:${t.refunded?'var(--red)':t.partialReturns?.length?'var(--accent2)':'var(--accent)'}">${t.refunded?'REFUNDED':t.partialReturns?.length?'PART RETURN':fmt(t.total)}</span>
+      </div>`).join('')||'<div style="color:var(--text2);font-size:0.74rem">No transactions yet.</div>'}
     </div>`;
 }
 
@@ -2103,7 +2531,7 @@ function renderProducts(){
     </div>
     <div class="card" id="prod-tbl-wrap">
       <table class="data-t" id="prod-tbl">
-        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Cost</th><th>Price</th><th>Total Stock</th><th>Reorder</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Cost</th><th>Price</th><th>Offer</th><th>Total Stock</th><th>Reorder</th><th></th></tr></thead>
         <tbody id="prod-tbody"></tbody>
       </table>
     </div>`;
@@ -2123,6 +2551,7 @@ function renderProductsTable(filter){
       <td>${esc(p.category||'—')}</td>
       <td>${fmt(p.cost||0)}</td>
       <td style="color:var(--accent);font-weight:600">${fmt(p.price)}</td>
+      <td>${activeOffer(p)?`<span style="font-size:0.62rem;font-weight:700;color:var(--purple)">🏷 ${esc(offerLabel(activeOffer(p)))}</span>`:'<span style="color:var(--text2)">—</span>'}</td>
       <td style="color:${low?'var(--red)':'var(--text)'}${low?';font-weight:700':''}">${total}${low?' ⚠️':''}</td>
       <td>${p.trackStock?(p.reorderLevel||0):'—'}</td>
       <td><button class="btn btn-o btn-sm" onclick="openProductModal('${p.id}')">Edit</button></td>
@@ -2148,6 +2577,18 @@ function openProductModal(id){
     <div class="s-row"><span style="font-size:0.77rem">🔞 Age Restricted (18+) — triggers Challenge 25 on till</span><label class="tog"><input type="checkbox" id="pm-age"${p?.ageRestricted?' checked':''}><span class="tog-sl"></span></label></div>
     <div style="font-size:0.62rem;color:var(--text2);margin:-6px 0 8px">Defaults from the product's category (set category VAT defaults in Settings) — tick/untick here to override just this product.</div>
     <div class="sf" style="margin-top:6px">
+      <label class="sl">🏷 Offer on this product</label>
+      <select class="si-s" id="pm-offer" onchange="pmOfferChange()">
+        <option value=""${!p?.offer?' selected':''}>No offer</option>
+        ${Object.entries(OFFER_TYPES).map(([k,v])=>`<option value="${k}"${p?.offer?.type===k?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <div class="field-row" id="pm-offer-extra" style="margin-top:6px;display:none">
+        <div class="sf" id="pm-offer-qty-wrap"><label class="sl">Quantity (N)</label><input type="number" class="si" id="pm-offer-qty" value="${p?.offer?.qty||2}" min="2" step="1"></div>
+        <div class="sf"><label class="sl" id="pm-offer-val-lbl">Value</label><input type="number" class="si" id="pm-offer-val" value="${p?.offer?.value??''}" min="0" step="0.01"></div>
+      </div>
+      <div style="font-size:0.62rem;color:var(--text2);margin-top:4px">Applies automatically at the till when the quantity qualifies. A product offer replaces any store-wide promotion on that item.</div>
+    </div>
+    <div class="sf" style="margin-top:6px">
       <label class="sl">Product Image URL (optional — auto-filled from barcode lookup)</label>
       <div style="display:flex;gap:7px;align-items:center">
         <input class="si" id="pm-img" value="${esc(p?.imageUrl||'')}" placeholder="https://… or leave blank" style="flex:1">
@@ -2159,6 +2600,16 @@ function openProductModal(id){
       <button class="btn btn-o" onclick="closeModal()">Cancel</button>
       <button class="btn btn-a" onclick="saveProduct('${id||''}')">Save</button>
     </div>`);
+  pmOfferChange();
+}
+function pmOfferChange(){
+  const t=document.getElementById('pm-offer')?.value||'';
+  const extra=document.getElementById('pm-offer-extra');if(!extra)return;
+  const needsVal=['multibuy','pct','fixed'].includes(t);
+  extra.style.display=needsVal?'flex':'none';
+  const q=document.getElementById('pm-offer-qty-wrap');if(q)q.style.display=t==='multibuy'?'':'none';
+  const lbl=document.getElementById('pm-offer-val-lbl');
+  if(lbl)lbl.textContent=t==='multibuy'?'Group price (£)':t==='pct'?'Percent off (%)':'Amount off each (£)';
 }
 
 function saveProduct(id){
@@ -2166,7 +2617,24 @@ function saveProduct(id){
   const price=parseFloat(document.getElementById('pm-price')?.value);
   if(!name||isNaN(price)){toast('Name and price are required','⚠️','t-o');return;}
   const prods=DB.get('products');
+  let offer=null;
+  const offerType=document.getElementById('pm-offer')?.value||'';
+  if(offerType){
+    const ov=parseFloat(document.getElementById('pm-offer-val')?.value);
+    const oq=parseInt(document.getElementById('pm-offer-qty')?.value);
+    if(offerType==='multibuy'){
+      if(isNaN(ov)||ov<0||isNaN(oq)||oq<2){toast('Multibuy needs a quantity of 2+ and a group price','⚠️','t-o');return;}
+      offer={type:offerType,qty:oq,value:ov};
+    }else if(offerType==='pct'){
+      if(isNaN(ov)||ov<=0||ov>100){toast('Enter a percentage between 1 and 100','⚠️','t-o');return;}
+      offer={type:offerType,value:ov};
+    }else if(offerType==='fixed'){
+      if(isNaN(ov)||ov<=0){toast('Enter the amount off each item','⚠️','t-o');return;}
+      offer={type:offerType,value:ov};
+    }else offer={type:offerType};
+  }
   const data={
+    offer,
     name,barcode:document.getElementById('pm-bc')?.value.trim()||'',
     category:document.getElementById('pm-cat')?.value.trim()||'General',
     price,cost:parseFloat(document.getElementById('pm-cost')?.value)||0,
@@ -2185,6 +2653,217 @@ function deleteProduct(id){
   if(!confirm('Delete this product?'))return;
   const prods=DB.get('products').filter(p=>p.id!==id);
   DB.set('products',prods);closeModal();renderProducts();toast('Product deleted','🗑️','t-o');
+}
+
+// ══════════════════════════════
+// CUSTOMERS
+// ══════════════════════════════
+function renderCustomers(){
+  const el=document.getElementById('customers-body');if(!el)return;
+  const custs=DB.get('customers');
+  const txns=DB.get('txns');
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <input class="srch" id="cust-filter" placeholder="Search name, phone, email…" oninput="filterCustomersTable(this.value)" style="max-width:280px">
+      <button class="btn btn-a" onclick="openCustomerModal(null)">+ New Customer</button>
+    </div>
+    <div class="card" id="cust-tbl-wrap">
+      <table class="data-t">
+        <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Purchases</th><th>Total Spent</th><th>Returns</th><th>Joined</th><th></th></tr></thead>
+        <tbody id="cust-tbody"></tbody>
+      </table>
+    </div>`;
+  renderCustomersTable('');
+}
+function renderCustomersTable(filter){
+  const custs=DB.get('customers');const txns=DB.get('txns');
+  const f=(filter||'').toLowerCase();
+  const rows=custs.filter(c=>!f||c.name.toLowerCase().includes(f)||(c.phone||'').includes(f)||(c.email||'').toLowerCase().includes(f));
+  const tbody=document.getElementById('cust-tbody');if(!tbody)return;
+  tbody.innerHTML=rows.map(c=>{
+    const custTxns=(c.txIds||[]).map(id=>txns.find(t=>t.id===id)).filter(Boolean);
+    const spent=custTxns.reduce((s,t)=>s+t.total,0);
+    const returns=(c.returns||[]).length;
+    return`<tr>
+      <td style="font-weight:600">${esc(c.name)}</td>
+      <td style="font-size:0.72rem">${esc(c.phone||'—')}</td>
+      <td style="font-size:0.72rem">${esc(c.email||'—')}</td>
+      <td>${custTxns.length}</td>
+      <td style="color:var(--accent);font-weight:600">${fmt(spent)}</td>
+      <td style="color:${returns>0?'var(--red)':'var(--text2)'}">${returns}</td>
+      <td style="font-size:0.65rem;color:var(--text2)">${c.createdAt?new Date(c.createdAt).toLocaleDateString('en-GB'):'—'}</td>
+      <td><button class="btn btn-o btn-sm" onclick="openCustomerModal('${c.id}')">View</button></td>
+    </tr>`;
+  }).join('');
+}
+function filterCustomersTable(v){renderCustomersTable(v);}
+function openCustomerModal(id){
+  const c=id?DB.get('customers').find(c=>c.id===id):null;
+  const txns=DB.get('txns');
+  const custTxns=c?(c.txIds||[]).map(tid=>txns.find(t=>t.id===tid)).filter(Boolean):[];
+  const spent=custTxns.reduce((s,t)=>s+t.total,0);
+  showModal(`<div class="modal-t">${c?'👤 '+esc(c.name):'New Customer'}</div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Name *</label><input class="si" id="cm-name" value="${esc(c?.name||'')}"></div>
+      <div class="sf"><label class="sl">Phone</label><input class="si" id="cm-phone" value="${esc(c?.phone||'')}"></div>
+    </div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Email</label><input class="si" id="cm-email" value="${esc(c?.email||'')}"></div>
+      <div class="sf"><label class="sl">Address</label><input class="si" id="cm-addr" value="${esc(c?.address||'')}"></div>
+    </div>
+    <div class="sf"><label class="sl">Notes</label><input class="si" id="cm-notes" value="${esc(c?.notes||'')}"></div>
+    ${c?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap">
+        <div><div style="font-size:0.62rem;color:var(--text2)">PURCHASES</div><div style="font-size:1.3rem;font-weight:700;color:var(--accent)">${custTxns.length}</div></div>
+        <div><div style="font-size:0.62rem;color:var(--text2)">TOTAL SPENT</div><div style="font-size:1.3rem;font-weight:700;color:var(--green)">${fmt(spent)}</div></div>
+        <div><div style="font-size:0.62rem;color:var(--text2)">RETURNS</div><div style="font-size:1.3rem;font-weight:700;color:var(--red)">${(c.returns||[]).length}</div></div>
+      </div>
+      <div style="font-size:0.7rem;color:var(--text2);margin-bottom:5px">Purchase History</div>
+      <div style="max-height:160px;overflow-y:auto">
+        ${custTxns.slice().reverse().map(t=>`<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:5px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text2)">${new Date(t.time).toLocaleDateString('en-GB')}</span>
+          <span style="font-family:'JetBrains Mono';font-size:0.6rem;color:var(--blue)">${esc(t.saleNo||t.id)}</span>
+          <span>${(t.items||[]).length} item(s)</span>
+          <span style="font-weight:600;color:${t.refunded?'var(--red)':'var(--accent)'}">${t.refunded?'REFUNDED':fmt(t.total)}</span>
+        </div>`).join('')||'<div style="color:var(--text2);font-size:0.72rem;padding:6px 0">No purchases yet.</div>'}
+      </div>
+    </div>`:''}
+    <div class="btn-row" style="margin-top:12px">
+      ${c?`<button class="btn btn-r" onclick="deleteCustomer('${c.id}')">Delete</button>`:''}
+      <button class="btn btn-o" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-a" onclick="saveCustomer('${id||''}')">Save</button>
+    </div>`);
+}
+function saveCustomer(id){
+  const name=document.getElementById('cm-name')?.value.trim();
+  if(!name){toast('Name is required','⚠️','t-o');return;}
+  const custs=DB.get('customers');
+  const data={name,phone:document.getElementById('cm-phone')?.value.trim()||'',email:document.getElementById('cm-email')?.value.trim()||'',address:document.getElementById('cm-addr')?.value.trim()||'',notes:document.getElementById('cm-notes')?.value.trim()||''};
+  if(id){const idx=custs.findIndex(c=>c.id===id);if(idx>-1)custs[idx]=Object.assign({},custs[idx],data);}
+  else{custs.push({id:'C'+Date.now(),...data,txIds:[],returns:[],createdAt:Date.now()});}
+  DB.set('customers',custs);closeModal();renderCustomers();toast((id?'Updated':'Created')+': '+name,'✅','t-g');
+}
+function deleteCustomer(id){
+  if(!confirm('Delete this customer record? Their purchase history links will be removed.'))return;
+  const custs=DB.get('customers').filter(c=>c.id!==id);
+  DB.set('customers',custs);closeModal();renderCustomers();toast('Customer deleted','🗑️','t-o');
+}
+
+// ══════════════════════════════
+// PROMOTIONS
+// ══════════════════════════════
+function renderPromotions(){
+  const el=document.getElementById('promotions-body');if(!el)return;
+  const promos=DB.get('promotions');
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:0.78rem;color:var(--text2)">Active promotions apply automatically at checkout.</div>
+      <button class="btn btn-a" onclick="openPromoModal(null)">+ New Promotion</button>
+    </div>
+    ${promos.length?promos.map(pr=>{
+      const now=Date.now();
+      const active=pr.enabled&&(!pr.startDate||new Date(pr.startDate).getTime()<=now)&&(!pr.endDate||new Date(pr.endDate).getTime()>=now);
+      return`<div style="background:var(--bg2);border:1px solid ${active?'var(--green)':'var(--border)'};border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.85rem">${esc(pr.name)} <span class="badge ${active?'badge-g':'badge-r'}">${active?'Active':'Inactive'}</span></div>
+          <div style="font-size:0.7rem;color:var(--purple);margin-top:2px">${promoTypeLabel(pr)}</div>
+          ${pr.startDate||pr.endDate?`<div style="font-size:0.62rem;color:var(--text2);margin-top:2px">${pr.startDate?'From '+pr.startDate:''}${pr.endDate?' · Until '+pr.endDate:''}</div>`:''}
+        </div>
+        <label class="tog"><input type="checkbox" ${pr.enabled?'checked':''} onchange="togglePromo('${pr.id}',this.checked)"><span class="tog-sl"></span></label>
+        <button class="btn btn-o btn-sm" onclick="openPromoModal('${pr.id}')">Edit</button>
+      </div>`;
+    }).join(''):'<div style="color:var(--text2);padding:20px;text-align:center">No promotions yet. Create one to apply automatic discounts at checkout.</div>'}`;
+}
+function togglePromo(id,enabled){
+  const promos=DB.get('promotions');const p=promos.find(p=>p.id===id);if(!p)return;
+  p.enabled=enabled;DB.set('promotions',promos);toast((enabled?'Enabled':'Disabled')+': '+p.name,'🏷','t-b');
+}
+function openPromoModal(id){
+  const pr=id?DB.get('promotions').find(p=>p.id===id):null;
+  const cats=[...new Set(DB.get('products').map(p=>p.category))].filter(Boolean);
+  const prods=DB.get('products');
+  showModal(`<div class="modal-t">${pr?'Edit':'New'} Promotion</div>
+    <div class="sf"><label class="sl">Promotion Name *</label><input class="si" id="prm-name" value="${esc(pr?.name||'')}"></div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Type</label>
+        <select class="si-s" id="prm-type" onchange="promoTypeChanged()">
+          <option value="pct"${pr?.type==='pct'?' selected':''}>% Off</option>
+          <option value="fixed"${pr?.type==='fixed'?' selected':''}>£ Off</option>
+          <option value="bogo"${pr?.type==='bogo'?' selected':''}>Buy 1 Get 1 Free</option>
+          <option value="halfprice"${pr?.type==='halfprice'?' selected':''}>Half Price</option>
+          <option value="multibuy"${pr?.type==='multibuy'?' selected':''}>Multi-Buy (2/3 for £X)</option>
+        </select></div>
+      <div class="sf" id="prm-val-wrap"><label class="sl" id="prm-val-label">Value</label><input type="number" class="si" id="prm-val" min="0" step="0.01" value="${pr?.value||''}"></div>
+    </div>
+    <div id="prm-multibuy-wrap" style="display:none">
+      <div class="field-row">
+        <div class="sf"><label class="sl">Group Qty (e.g. 2 or 3)</label><input type="number" class="si" id="prm-gqty" min="2" step="1" value="${pr?.groupQty||2}"></div>
+        <div class="sf"><label class="sl">Group Price (£)</label><input type="number" class="si" id="prm-gprice" min="0" step="0.01" value="${pr?.groupPrice||''}"></div>
+      </div>
+    </div>
+    <div class="sf"><label class="sl">Applies To</label>
+      <select class="si-s" id="prm-scope" onchange="promoScopeChanged()">
+        <option value="all"${pr?.scope==='all'?' selected':''}>All Products</option>
+        <option value="category"${pr?.scope==='category'?' selected':''}>Category</option>
+        <option value="product"${pr?.scope==='product'?' selected':''}>Specific Product</option>
+      </select></div>
+    <div id="prm-cat-wrap" style="display:${pr?.scope==='category'?'block':'none'}">
+      <div class="sf"><label class="sl">Category</label>
+        <select class="si-s" id="prm-cat">${cats.map(c=>`<option value="${esc(c)}"${pr?.category===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div></div>
+    <div id="prm-prod-wrap" style="display:${pr?.scope==='product'?'block':'none'}">
+      <div class="sf"><label class="sl">Product</label>
+        <select class="si-s" id="prm-prod">${prods.map(p=>`<option value="${p.id}"${pr?.productId===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select></div></div>
+    <div class="field-row">
+      <div class="sf"><label class="sl">Start Date (optional)</label><input type="date" class="si" id="prm-start" value="${pr?.startDate||''}"></div>
+      <div class="sf"><label class="sl">End Date (optional)</label><input type="date" class="si" id="prm-end" value="${pr?.endDate||''}"></div>
+    </div>
+    <div class="s-row"><span style="font-size:0.77rem">Enable this promotion immediately</span><label class="tog"><input type="checkbox" id="prm-enabled"${(pr?.enabled!==false)?'checked':''}><span class="tog-sl"></span></label></div>
+    <div class="btn-row" style="margin-top:10px">
+      ${pr?`<button class="btn btn-r" onclick="deletePromo('${pr.id}')">Delete</button>`:''}
+      <button class="btn btn-o" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-a" onclick="savePromo('${id||''}')">Save</button>
+    </div>`);
+  promoTypeChanged();promoScopeChanged();
+}
+window.promoTypeChanged=function(){
+  const t=document.getElementById('prm-type')?.value;
+  const vw=document.getElementById('prm-val-wrap');const mw=document.getElementById('prm-multibuy-wrap');
+  const vl=document.getElementById('prm-val-label');
+  if(t==='pct'){if(vw)vw.style.display='';if(mw)mw.style.display='none';if(vl)vl.textContent='% Value';}
+  else if(t==='fixed'){if(vw)vw.style.display='';if(mw)mw.style.display='none';if(vl)vl.textContent='£ Off Amount';}
+  else if(t==='multibuy'){if(vw)vw.style.display='none';if(mw)mw.style.display='';}
+  else{if(vw)vw.style.display='none';if(mw)mw.style.display='none';}
+};
+window.promoScopeChanged=function(){
+  const s=document.getElementById('prm-scope')?.value;
+  const cw=document.getElementById('prm-cat-wrap');const pw=document.getElementById('prm-prod-wrap');
+  if(cw)cw.style.display=s==='category'?'block':'none';
+  if(pw)pw.style.display=s==='product'?'block':'none';
+};
+function savePromo(id){
+  const name=document.getElementById('prm-name')?.value.trim();
+  if(!name){toast('Name is required','⚠️','t-o');return;}
+  const type=document.getElementById('prm-type')?.value;
+  const scope=document.getElementById('prm-scope')?.value;
+  const data={name,type,scope,
+    value:parseFloat(document.getElementById('prm-val')?.value)||0,
+    groupQty:parseInt(document.getElementById('prm-gqty')?.value)||2,
+    groupPrice:parseFloat(document.getElementById('prm-gprice')?.value)||0,
+    category:document.getElementById('prm-cat')?.value||'',
+    productId:document.getElementById('prm-prod')?.value||'',
+    startDate:document.getElementById('prm-start')?.value||'',
+    endDate:document.getElementById('prm-end')?.value||'',
+    enabled:document.getElementById('prm-enabled')?.checked!==false,
+  };
+  const promos=DB.get('promotions');
+  if(id){const idx=promos.findIndex(p=>p.id===id);if(idx>-1)promos[idx]=Object.assign({},promos[idx],data);}
+  else{promos.push({id:'PR'+Date.now(),...data});}
+  DB.set('promotions',promos);closeModal();renderPromotions();toast((id?'Updated':'Created')+': '+name,'✅','t-g');
+}
+function deletePromo(id){
+  if(!confirm('Delete this promotion?'))return;
+  DB.set('promotions',DB.get('promotions').filter(p=>p.id!==id));
+  closeModal();renderPromotions();toast('Promotion deleted','🗑️','t-o');
 }
 
 // REPORTS
@@ -2588,7 +3267,15 @@ function renderSettings(){
         <div class="sf"><label class="sl">Address</label><input class="si" id="cfg-addr" value="${esc(cfg.storeAddr||'')}"></div>
         <div class="sf"><label class="sl">Phone</label><input class="si" id="cfg-tel" value="${esc(cfg.storeTel||'')}"></div>
         <div class="sf"><label class="sl">Receipt Footer</label><input class="si" id="cfg-footer" value="${esc(cfg.receiptFooter||'')}"></div>
-        <div class="sf"><label class="sl">VAT Rate (%)</label><input type="number" class="si" id="cfg-vat" value="${cfg.vatRate||20}" min="0" max="100"></div>
+        <div class="field-row">
+          <div class="sf"><label class="sl">VAT Rate (%)</label><input type="number" class="si" id="cfg-vat" value="${cfg.vatRate||20}" min="0" max="100"></div>
+          <div class="sf"><label class="sl">VAT Mode</label>
+            <select class="si-s" id="cfg-vatmode">
+              <option value="inclusive"${(cfg.vatMode||'inclusive')==='inclusive'?' selected':''}>Inclusive (price includes VAT)</option>
+              <option value="exclusive"${cfg.vatMode==='exclusive'?' selected':''}>Exclusive (VAT added on top)</option>
+            </select>
+          </div>
+        </div>
         <div class="sf">
           <label class="sl">Receipt Logo (appears at top of printed receipts)</label>
           <div style="display:flex;gap:10px;align-items:center">
@@ -2751,6 +3438,7 @@ function saveStoreCfg(){
   cfg.storeTel=document.getElementById('cfg-tel')?.value||'';
   cfg.receiptFooter=document.getElementById('cfg-footer')?.value||'';
   cfg.vatRate=parseFloat(document.getElementById('cfg-vat')?.value)||20;
+  cfg.vatMode=document.getElementById('cfg-vatmode')?.value||'inclusive';
   DB.set('cfg',cfg);initStationScreen();toast('Store details saved','✅','t-g');
 }
 
