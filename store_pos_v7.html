@@ -736,56 +736,35 @@ function refreshCurrentView(){
   // Don't interrupt an open modal or active charge flow
   if(document.getElementById('modal-overlay')?.style.display==='flex')return;
 
-  const v=S.view;
-  if(!v)return;
+  // Use DOM visibility as the source of truth — more reliable than S.view
+  // which may lag if the remote fires before the station is fully mounted
+  function isVisible(id){
+    const el=document.getElementById(id);
+    return el&&(el.style.display==='flex'||el.classList.contains('on'));
+  }
 
   try{
-    switch(v){
-      // ── Till views ───────────────────────────────────────────────────
-      case 'v-till':
-        renderProdGrid();
-        renderCartItems();
-        renderCartTotals();
-        renderTillStockAlerts();
-        break;
-
-      // ── Stock views ──────────────────────────────────────────────────
-      case 'v-intake':
-        renderIntake();
-        break;
-      case 'v-transfer':
-        renderTransfer();
-        break;
-      case 'v-stocktake':
-        renderStocktake();
-        break;
-
-      // ── Owner / Manager views ────────────────────────────────────────
-      case 'v-dash':
-        renderDash();
-        break;
-      case 'v-products':
-        // Only refresh list, not an open edit form
-        if(typeof renderProductsTable==='function')renderProductsTable(
-          document.getElementById('prod-search')?.value||''
-        );
-        break;
-      case 'v-reports':
-        // Re-render the currently selected report sub-tab if visible
-        if(typeof renderReports==='function')renderReports();
-        break;
-      case 'v-users':
-        renderUsers();
-        break;
-
-      // ── Settings ─────────────────────────────────────────────────────
-      case 'v-settings':
-        // Don't re-render settings — disruptive if staff are mid-edit
-        break;
-
-      default:
-        break;
+    if(isVisible('v-dash')){
+      renderDash();
+      return;
     }
+    if(isVisible('v-till')){
+      renderProdGrid();
+      renderCartItems();
+      renderCartTotals();
+      renderTillStockAlerts();
+      return;
+    }
+    if(isVisible('v-intake')){renderIntake();return;}
+    if(isVisible('v-transfer')){renderTransfer();return;}
+    if(isVisible('v-stocktake')){renderStocktake();return;}
+    if(isVisible('v-products')){
+      renderProductsTable(document.getElementById('prod-search')?.value||'');
+      return;
+    }
+    if(isVisible('v-reports')){renderReports();return;}
+    if(isVisible('v-users')){renderUsers();return;}
+    // v-settings intentionally skipped — disruptive mid-edit
   }catch(e){
     // Swallow silently — view may not be mounted yet
   }
@@ -1876,9 +1855,16 @@ function buildManager(){
     <div class="view" id="v-reports"  style="display:none;flex-direction:column;"><div class="vscroll" id="reports-body"></div></div>
     <div class="view" id="v-users"    style="display:none;flex-direction:column;"><div class="vscroll" id="users-body"></div></div>`;
   switchV('v-dash',tb.querySelector('.tab'));renderDash();
-  // Dashboard live-refresh every 30s (catches any missed broadcast)
+  // Dashboard live-refresh every 5s — always current even if broadcast missed
   if(window._dashTimer)clearInterval(window._dashTimer);
-  window._dashTimer=setInterval(()=>{if(S.view==='v-dash')renderDash();},30000);
+  window._dashTimer=setInterval(()=>{
+    try{
+      const v=document.getElementById('v-dash');
+      if(v&&(v.style.display==='flex'||v.classList.contains('on'))){
+        renderDash();
+      }
+    }catch(e){}
+  },5000);
 }
 
 // DASHBOARD
@@ -1900,6 +1886,10 @@ function renderDash(){
   const todayCost=todayTxns.flatMap(t=>t.items).reduce((s,i)=>{const p=prodById(i.id);return s+(p?.cost||0)*i.qty;},0);
   const todayGP=todaySales-todayCost;
   el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 14px 4px;font-size:0.65rem;color:var(--text2);border-bottom:1px solid var(--border)">
+      <span>📊 Dashboard</span>
+      <span>⚡ Live · Updated ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
+    </div>
     ${lowStock.length?`<div style="background:rgba(255,69,96,0.1);border-bottom:1px solid rgba(255,69,96,0.25);padding:9px 14px;font-size:0.73rem;color:var(--red);cursor:pointer" onclick="switchV('v-reports',document.querySelector('#t-tabs .tab:nth-child(3)'));renderReports();setTimeout(()=>showReport('stock',document.querySelector('#reports-body .tab:nth-child(2)')),100)">⚠️ <strong>${lowStock.length} product(s)</strong> at or below minimum stock level — tap to view in Reports</div>`:''}
     <div class="dash-g">
       <div class="dc"><div class="dc-l">Today's Sales</div><div class="dc-v">${fmt(todaySales)}</div><div class="dc-s">${todayTxns.length} transaction(s)</div></div>
