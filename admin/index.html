@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CBSystem Shop — Admin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap">
+<script src="../config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#0a0a0f;--card:#1e1e2e;--in:#12121a;--bd:#2a2a40;--ac:#ff6b35;--tx:#f0f0f8;--t2:#9090b0;--gr:#2dd4a0;--rd:#ff4560}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.5 'DM Sans',system-ui,sans-serif;padding:22px 16px 60px;max-width:780px;margin:0 auto}
+h1{font:2.2rem 'Bebas Neue',Impact,sans-serif;letter-spacing:3px;color:var(--ac)}
+h2{font-size:.95rem;margin-bottom:10px}
+.sub{color:var(--t2);margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:.75rem;font-weight:600;color:var(--t2);margin:8px 0 4px}
+input,textarea{width:100%;background:var(--in);border:1px solid var(--bd);border-radius:8px;padding:9px 11px;color:var(--tx);font:inherit}
+input:focus,textarea:focus{outline:2px solid var(--ac);outline-offset:1px}
+textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;min-height:210px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:200px}
+button{border:0;border-radius:8px;padding:9px 15px;font:700 .8rem 'DM Sans',sans-serif;cursor:pointer;background:var(--ac);color:#fff;margin-top:12px}
+button.o{background:transparent;border:1px solid var(--bd);color:var(--tx);margin:0;padding:5px 10px;font-size:.72rem}
+button.o:hover{border-color:var(--ac)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--bd);font-size:.8rem}
+th{border:0;color:var(--t2);font-size:.7rem}
+.on{color:var(--gr)}.off{color:var(--rd)}
+#msg{margin-top:10px;min-height:20px;font-weight:600}.err{color:var(--rd)}.ok{color:var(--gr)}
+.hide{display:none}
+</style></head>
+<body>
+<h1>CBSystem Shop</h1>
+<p class="sub">Admin — create and manage shops</p>
+
+<div class="card" id="login">
+  <h2>Admin key</h2>
+  <label for="ak">The ADMIN_KEY you saved in Supabase secrets</label>
+  <input id="ak" type="password" autocomplete="off">
+  <button id="go">Sign in</button>
+</div>
+
+<div id="app" class="hide">
+  <div class="card">
+    <h2>New shop</h2>
+    <div class="row">
+      <div><label for="nm">Business name</label><input id="nm" placeholder="e.g. Patel Family Mini Market"></div>
+      <div><label for="bid">Id (used in the staff link)</label><input id="bid" placeholder="patel-mini-market"></div>
+    </div>
+    <button id="create">Create shop</button>
+  </div>
+
+  <div class="card hide" id="res">
+    <h2 id="rt">Ready to send</h2>
+    <p class="sub" style="margin:0 0 8px">The staff key is shown only once. Copy it now.</p>
+    <textarea id="txt" readonly></textarea>
+    <div id="qr" class="hide" style="margin-top:12px;background:#fff;padding:8px;width:max-content;border-radius:6px"></div>
+    <p class="sub hide" id="qrnote" style="margin:6px 0 0">Scan with a tablet or phone to open the staff link. The QR holds the link only, never the key.</p>
+    <button id="copy">Copy message</button>
+  </div>
+
+  <div class="card">
+    <h2>All shops</h2>
+    <table><thead><tr><th>Name</th><th>Id</th><th>Status</th><th>Last saved</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+  </div>
+</div>
+<div id="msg"></div>
+
+<script>
+let KEY='';
+const $=id=>document.getElementById(id);
+const say=(t,c)=>{$('msg').textContent=t||'';$('msg').className=c||''};
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,38);
+const staffUrl=id=>location.origin+location.pathname.replace(/admin\/(index\.html)?$/,'staff/')+'?biz='+encodeURIComponent(id);
+
+async function api(action,body){
+  if(!window.CBS_API||/YOUR-PROJECT/.test(CBS_API))throw new Error('Edit config.js first: put your Supabase function address in it.');
+  const r=await fetch(CBS_API,{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':KEY},body:JSON.stringify({action,...body})});
+  const j=await r.json().catch(()=>({error:'Unexpected reply from the server'}));
+  if(!r.ok)throw new Error(j.error||('Error '+r.status));
+  return j;
+}
+function showMessage(title,lines,link){$('rt').textContent=title;$('txt').value=lines.join('\n');const q=$('qr');q.textContent='';const ok=link&&window.QRCode;q.classList.toggle('hide',!ok);$('qrnote').classList.toggle('hide',!ok);if(ok)new QRCode(q,{text:link,width:150,height:150});$('res').classList.remove('hide');$('res').scrollIntoView({behavior:'smooth'})}
+
+async function load(){
+  const {businesses}=await api('admin_list');
+  const tb=$('tb');tb.textContent='';
+  if(!businesses.length){const tr=tb.insertRow(),td=tr.insertCell();td.colSpan=5;td.textContent='No shops yet. Create the first one above.';return}
+  businesses.forEach(b=>{
+    const tr=tb.insertRow();
+    tr.insertCell().textContent=b.name;
+    tr.insertCell().textContent=b.id;
+    const st=tr.insertCell();st.textContent=b.active?'Active':'Paused';st.className=b.active?'on':'off';
+    tr.insertCell().textContent=new Date(b.updated_at).toLocaleString('en-GB');
+    const ac=tr.insertCell();
+    const mk=(label,fn)=>{const x=document.createElement('button');x.className='o';x.textContent=label;x.style.marginRight='6px';x.onclick=async()=>{try{await fn();}catch(e){say(e.message,'err')}};ac.appendChild(x)};
+    mk(b.active?'Pause':'Resume',async()=>{await api('admin_setActive',{id:b.id,active:!b.active});say(b.name+(b.active?' paused':' resumed'),'ok');load()});
+    mk('New staff key',async()=>{
+      if(!confirm('Make a new staff key for '+b.name+'? The old key stops working on every device.'))return;
+      const r=await api('admin_resetKey',{id:b.id});
+      showMessage('New staff key for '+b.name,['Staff link: '+staffUrl(b.id),'New staff key: '+r.staffKey,'','Open the link and enter the new key once on each device.'],staffUrl(b.id));
+    });
+  });
+}
+
+$('go').onclick=async()=>{
+  KEY=$('ak').value.trim();say('');
+  try{await load();$('login').classList.add('hide');$('app').classList.remove('hide')}catch(e){KEY='';say(e.message,'err')}
+};
+$('ak').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click()});
+$('nm').addEventListener('input',()=>{$('bid').value=slug($('nm').value)});
+$('create').onclick=async()=>{
+  say('');
+  try{
+    const r=await api('admin_create',{name:$('nm').value,id:$('bid').value});
+    showMessage('Ready to send: '+r.name,[
+      'Welcome to CBSystem Shop. Your shop system is ready.','',
+      'Staff link: '+staffUrl(r.id),
+      'Staff key (keep private): '+r.staffKey,
+      'Owner PIN: '+r.ownerPin,
+      'Till PIN: '+r.tillPin,
+      'Settings PIN: '+r.settingsPin,'',
+      'First steps: open the link and enter the staff key once on each device. Log in as Owner and change the PINs (Users). Then set your shop details (Settings), add your products and stock.'],staffUrl(r.id));
+    $('nm').value='';$('bid').value='';load();
+  }catch(e){say(e.message,'err')}
+};
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('txt').value);say('Message copied','ok')}catch(e){$('txt').select();say('Select the text and copy it','err')}};
+</script>
+</body></html>
