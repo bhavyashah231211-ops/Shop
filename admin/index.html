@@ -9,7 +9,7 @@
 <style>
 :root{--bg:#0a0a0f;--card:#1e1e2e;--in:#12121a;--bd:#2a2a40;--ac:#ff6b35;--tx:#f0f0f8;--t2:#9090b0;--gr:#2dd4a0;--rd:#ff4560}
 *{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--tx);font:14px/1.5 'DM Sans',system-ui,sans-serif;padding:22px 16px 60px;max-width:780px;margin:0 auto}
+body{background:var(--bg);color:var(--tx);font:14px/1.5 'DM Sans',system-ui,sans-serif;padding:22px 16px 60px;max-width:820px;margin:0 auto}
 h1{font:2.2rem 'Bebas Neue',Impact,sans-serif;letter-spacing:3px;color:var(--ac)}
 h2{font-size:.95rem;margin-bottom:10px}
 .sub{color:var(--t2);margin-bottom:18px}
@@ -22,9 +22,12 @@ textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;min-
 button{border:0;border-radius:8px;padding:9px 15px;font:700 .8rem 'DM Sans',sans-serif;cursor:pointer;background:var(--ac);color:#fff;margin-top:12px}
 button.o{background:transparent;border:1px solid var(--bd);color:var(--tx);margin:0;padding:5px 10px;font-size:.72rem}
 button.o:hover{border-color:var(--ac)}
+button.d{border-color:var(--rd);color:var(--rd)}
+button.d:hover{background:var(--rd);color:#fff;border-color:var(--rd)}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--bd);font-size:.8rem}
 th{border:0;color:var(--t2);font-size:.7rem}
+td.act{display:flex;gap:6px;flex-wrap:wrap}
 .on{color:var(--gr)}.off{color:var(--rd)}
 #msg{margin-top:10px;min-height:20px;font-weight:600}.err{color:var(--rd)}.ok{color:var(--gr)}
 .hide{display:none}
@@ -44,15 +47,15 @@ th{border:0;color:var(--t2);font-size:.7rem}
   <div class="card">
     <h2>New shop</h2>
     <div class="row">
-      <div><label for="nm">Business name</label><input id="nm" placeholder="e.g. Patel Family Mini Market"></div>
-      <div><label for="bid">Id (used in the staff link)</label><input id="bid" placeholder="patel-mini-market"></div>
+      <div><label for="nm">Business name</label><input id="nm" placeholder="e.g. Patel Family Mini Market" autocomplete="off"></div>
+      <div><label for="bid">Id (used in the staff link)</label><input id="bid" placeholder="patel-mini-market" autocomplete="off"></div>
     </div>
     <button id="create">Create shop</button>
   </div>
 
   <div class="card hide" id="res">
     <h2 id="rt">Ready to send</h2>
-    <p class="sub" style="margin:0 0 8px">The staff key is shown only once. Copy it now.</p>
+    <p class="sub" style="margin:0 0 8px" id="rsub">The staff key is shown only once. Copy it now.</p>
     <textarea id="txt" readonly></textarea>
     <div id="qr" class="hide" style="margin-top:12px;background:#fff;padding:8px;width:max-content;border-radius:6px"></div>
     <p class="sub hide" id="qrnote" style="margin:6px 0 0">Scan with a tablet or phone to open the staff link. The QR holds the link only, never the key.</p>
@@ -72,6 +75,7 @@ const $=id=>document.getElementById(id);
 const say=(t,c)=>{$('msg').textContent=t||'';$('msg').className=c||''};
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,38);
 const staffUrl=id=>location.origin+location.pathname.replace(/admin\/(index\.html)?$/,'staff/')+'?biz='+encodeURIComponent(id);
+const fmt=d=>d?new Date(d).toLocaleString('en-GB'):'-';
 
 async function api(action,body){
   if(!window.CBS_API||/YOUR-PROJECT/.test(CBS_API))throw new Error('Edit config.js first: put your Supabase function address in it.');
@@ -80,7 +84,7 @@ async function api(action,body){
   if(!r.ok)throw new Error(j.error||('Error '+r.status));
   return j;
 }
-function showMessage(title,lines,link){$('rt').textContent=title;$('txt').value=lines.join('\n');const q=$('qr');q.textContent='';const ok=link&&window.QRCode;q.classList.toggle('hide',!ok);$('qrnote').classList.toggle('hide',!ok);if(ok)new QRCode(q,{text:link,width:150,height:150});$('res').classList.remove('hide');$('res').scrollIntoView({behavior:'smooth'})}
+function showMessage(title,lines,link,sub){$('rt').textContent=title;$('rsub').textContent=sub||'The staff key is shown only once. Copy it now.';$('txt').value=lines.join('\n');const q=$('qr');q.textContent='';const ok=link&&window.QRCode;q.classList.toggle('hide',!ok);$('qrnote').classList.toggle('hide',!ok);if(ok)new QRCode(q,{text:link,width:150,height:150});$('res').classList.remove('hide');$('res').scrollIntoView({behavior:'smooth'})}
 
 async function load(){
   const {businesses}=await api('admin_list');
@@ -91,15 +95,41 @@ async function load(){
     tr.insertCell().textContent=b.name;
     tr.insertCell().textContent=b.id;
     const st=tr.insertCell();st.textContent=b.active?'Active':'Paused';st.className=b.active?'on':'off';
-    tr.insertCell().textContent=new Date(b.updated_at).toLocaleString('en-GB');
-    const ac=tr.insertCell();
-    const mk=(label,fn)=>{const x=document.createElement('button');x.className='o';x.textContent=label;x.style.marginRight='6px';x.onclick=async()=>{try{await fn();}catch(e){say(e.message,'err')}};ac.appendChild(x)};
+    tr.insertCell().textContent=fmt(b.updated_at);
+    const ac=tr.insertCell();ac.className='act';
+    const mk=(label,fn,cls)=>{const x=document.createElement('button');x.className='o'+(cls?' '+cls:'');x.textContent=label;x.onclick=async()=>{try{await fn();}catch(e){say(e.message,'err')}};ac.appendChild(x)};
+    mk('Details',async()=>{
+      say('');
+      const r=await api('admin_details',{id:b.id});
+      const lines=[
+        'Shop: '+r.name+' ('+r.id+')',
+        'Status: '+(r.active?'Active':'Paused'),
+        'Created: '+fmt(r.created_at),
+        'Last saved: '+fmt(r.updated_at),
+        'Saves (version): '+r.version,
+        'Products: '+r.products,'',
+        'Staff link: '+staffUrl(r.id),
+        'Staff key: '+(r.staffKey||'not stored - press "New staff key" to make one'),'',
+        'Staff PINs (current):'
+      ];
+      (r.staff||[]).forEach(s=>lines.push('  '+s.name+' ('+s.role+'): '+s.pin));
+      lines.push('Settings PIN: '+(r.settingsPin||'-'));
+      showMessage('Details: '+r.name,lines,staffUrl(r.id),'Private information. Do not share this screen.');
+    });
     mk(b.active?'Pause':'Resume',async()=>{await api('admin_setActive',{id:b.id,active:!b.active});say(b.name+(b.active?' paused':' resumed'),'ok');load()});
     mk('New staff key',async()=>{
       if(!confirm('Make a new staff key for '+b.name+'? The old key stops working on every device.'))return;
       const r=await api('admin_resetKey',{id:b.id});
       showMessage('New staff key for '+b.name,['Staff link: '+staffUrl(b.id),'New staff key: '+r.staffKey,'','Open the link and enter the new key once on each device.'],staffUrl(b.id));
     });
+    mk('Delete',async()=>{
+      const t=prompt('This permanently deletes "'+b.name+'" with all its products, staff and sales. It cannot be undone.\n\nType the shop id ('+b.id+') to confirm:');
+      if(t===null)return;
+      if(t.trim().toLowerCase()!==b.id){say('Id did not match. Nothing was deleted.','err');return}
+      await api('admin_delete',{id:b.id,confirm:t.trim()});
+      $('res').classList.add('hide');
+      say(b.name+' deleted','ok');load();
+    },'d');
   });
 }
 
